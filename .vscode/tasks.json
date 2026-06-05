@@ -1,0 +1,43 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "wonderscan: configure",
+      "type": "shell",
+      "command": "cmake -S . -B build -DCMAKE_BUILD_TYPE=Release",
+      "problemMatcher": []
+    },
+    {
+      "label": "wonderscan: build",
+      "type": "shell",
+      "command": "cmake --build build -j$(nproc)",
+      "dependsOn": "wonderscan: configure",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "wonderscan: self-test",
+      "type": "shell",
+      "command": "QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/wonderscan_selftest.pdf",
+      "dependsOn": "wonderscan: build",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "wonderscan: install",
+      "detail": "Build and install into ~/.local (no sudo). Appears in your app menu.",
+      "type": "shell",
+      "command": "cmake --install build --prefix \"$HOME/.local\" && (update-desktop-database \"$HOME/.local/share/applications\" 2>/dev/null || true) && (gtk-update-icon-cache -f \"$HOME/.local/share/icons/hicolor\" 2>/dev/null || true) && echo 'Installed to ~/.local — run: wonderscan'",
+      "dependsOn": "wonderscan: build",
+      "problemMatcher": []
+    },
+    {
+      "label": "wonderscan: install (system, sudo)",
+      "detail": "Build and install into /usr/local (requires sudo password in the terminal).",
+      "type": "shell",
+      "command": "sudo cmake --install build && (sudo update-desktop-database /usr/local/share/applications 2>/dev/null || true) && (sudo gtk-update-icon-cache -f /usr/local/share/icons/hicolor 2>/dev/null || true) && echo 'Installed to /usr/local'",
+      "dependsOn": "wonderscan: build",
+      "problemMatcher": []
+    }
+  ]
+}

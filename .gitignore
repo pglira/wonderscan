@@ -1,0 +1,11 @@
+# Build output
+/build/
+
+# Claude Code tooling (not part of the app)
+/.claude/
+
+# Editor / OS cruft
+*.user
+*.swp
+*~
+.DS_Store

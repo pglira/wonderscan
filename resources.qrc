@@ -1,0 +1,9 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+  <qresource prefix="/icons">
+    <file alias="wonderscan-256.png">packaging/icons/256x256/apps/wonderscan.png</file>
+    <file alias="wonderscan-128.png">packaging/icons/128x128/apps/wonderscan.png</file>
+    <file alias="wonderscan-64.png">packaging/icons/64x64/apps/wonderscan.png</file>
+    <file alias="wonderscan-32.png">packaging/icons/32x32/apps/wonderscan.png</file>
+  </qresource>
+</RCC>

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=wonderscan
+GenericName=Page Scanner
+Comment=Crop and dewarp photographed book pages into a PDF
+Exec=wonderscan %F
+Icon=wonderscan
+Terminal=false
+Categories=Graphics;Scanning;
+MimeType=image/jpeg;image/png;image/tiff;image/bmp;image/webp;
+Keywords=scan;book;page;crop;dewarp;pdf;
+StartupNotify=true
