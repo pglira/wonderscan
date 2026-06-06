@@ -149,6 +149,14 @@ void MainWindow::setupActions()
     m_actRotR->setShortcut(QKeySequence(Qt::Key_BracketRight));
     connect(m_actRotR, &QAction::triggered, this, &MainWindow::rotateRight);
 
+    m_actRotAllL = new QAction(tr("Rotate &All Left"), this);
+    m_actRotAllL->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_BracketLeft));
+    connect(m_actRotAllL, &QAction::triggered, this, &MainWindow::rotateAllLeft);
+
+    m_actRotAllR = new QAction(tr("Rotate All Ri&ght"), this);
+    m_actRotAllR->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_BracketRight));
+    connect(m_actRotAllR, &QAction::triggered, this, &MainWindow::rotateAllRight);
+
     m_actRemove = new QAction(tr("&Remove Image"), this);
     m_actRemove->setShortcut(QKeySequence::Delete);
     connect(m_actRemove, &QAction::triggered, this, &MainWindow::removeCurrentImage);
@@ -170,6 +178,8 @@ void MainWindow::setupActions()
 
     editMenu->addAction(m_actRotL);
     editMenu->addAction(m_actRotR);
+    editMenu->addAction(m_actRotAllL);
+    editMenu->addAction(m_actRotAllR);
     editMenu->addSeparator();
     editMenu->addAction(m_actRemove);
     editMenu->addSeparator();
@@ -181,6 +191,8 @@ void MainWindow::setupActions()
     tb->addSeparator();
     tb->addAction(m_actRotL);
     tb->addAction(m_actRotR);
+    tb->addAction(m_actRotAllL);
+    tb->addAction(m_actRotAllR);
     tb->addAction(m_actRemove);
     tb->addSeparator();
     tb->addWidget(m_chkSixPoint);
@@ -510,6 +522,53 @@ void MainWindow::rotateRight()
     updateFilmstripItem(m_current);
 }
 
+void MainWindow::rotateAllLeft()
+{
+    rotateAll(-90);
+}
+
+void MainWindow::rotateAllRight()
+{
+    rotateAll(90);
+}
+
+void MainWindow::rotateAll(int deltaDegrees)
+{
+    if (m_pages.isEmpty())
+        return;
+
+    // Rotating clears corners (like the single-image rotate), so warn before
+    // discarding any markings the user already made.
+    bool anyMarked = false;
+    for (const Page &p : m_pages)
+        if (p.marked) {
+            anyMarked = true;
+            break;
+        }
+    if (anyMarked) {
+        const auto ret = QMessageBox::question(
+            this, tr("Rotate All Images"),
+            tr("Rotating every image will clear the corner markings on all "
+               "already-marked pages.\n\nRotate all %n image(s) anyway?", "",
+               m_pages.size()),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (ret != QMessageBox::Yes)
+            return;
+    }
+
+    for (Page &p : m_pages) {
+        p.rotation = ((p.rotation + deltaDegrees) % 360 + 360) % 360;
+        p.points.clear();
+        p.marked = false;
+    }
+
+    setDirty(true);
+    rebuildFilmstrip(); // refresh every thumbnail at the new rotation
+    if (m_current >= 0)
+        refreshCurrent();
+    updateStatus();
+}
+
 void MainWindow::onModeToggled(bool six)
 {
     if (m_current < 0)
@@ -746,6 +805,13 @@ void MainWindow::updateTitle()
 
 void MainWindow::updateStatus()
 {
+    // Rotate-all acts on the whole batch, so it only needs images present.
+    const bool anyImages = !m_pages.isEmpty();
+    if (m_actRotAllL)
+        m_actRotAllL->setEnabled(anyImages);
+    if (m_actRotAllR)
+        m_actRotAllR->setEnabled(anyImages);
+
     if (m_current < 0) {
         m_statusLabel->setText(tr("%n image(s) loaded.", "", m_pages.size()));
         return;

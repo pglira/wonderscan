@@ -40,6 +40,8 @@ private slots:
     void onPointsChanged();
     void rotateLeft();
     void rotateRight();
+    void rotateAllLeft();
+    void rotateAllRight();
     void onModeToggled(bool six);
     void onSplitToggled(bool split);
     void goPrev();
@@ -49,6 +51,7 @@ private:
     void setupUi();
     void setupActions();
     void addImages(const QStringList &paths);
+    void rotateAll(int deltaDegrees);
     void selectIndex(int i);
     void refreshCurrent();
     void updatePreview();
@@ -92,5 +95,7 @@ private:
     QAction *m_actNext = nullptr;
     QAction *m_actRotL = nullptr;
     QAction *m_actRotR = nullptr;
+    QAction *m_actRotAllL = nullptr;
+    QAction *m_actRotAllR = nullptr;
     QAction *m_actRemove = nullptr;
 };

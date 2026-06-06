@@ -165,8 +165,17 @@ void ImageCanvas::drawLoupe(QPainter &p) const
     const double srcD = kLoupeDiameter / m_loupeZoom;
     QRectF srcRect(ip.x() - srcD / 2.0, ip.y() - srcD / 2.0, srcD, srcD);
 
-    // Loupe sits in the top-left corner, away from the cursor.
-    QRectF loupeRect(kLoupeMargin, kLoupeMargin, kLoupeDiameter, kLoupeDiameter);
+    // Keep the loupe clear of the handle being dragged: place it on the same
+    // horizontal side as the handle but the opposite vertical side (e.g. drag
+    // the top-left corner -> loupe shows in the bottom-left).
+    const QPointF handleW = imageToWidget(ip);
+    const bool handleLeft = handleW.x() < width() / 2.0;
+    const bool handleTop = handleW.y() < height() / 2.0;
+    const double lx = handleLeft ? kLoupeMargin
+                                 : width() - kLoupeDiameter - kLoupeMargin;
+    const double ly = handleTop ? height() - kLoupeDiameter - kLoupeMargin
+                                : kLoupeMargin;
+    QRectF loupeRect(lx, ly, kLoupeDiameter, kLoupeDiameter);
 
     QPainterPath clip;
     clip.addEllipse(loupeRect);
@@ -186,8 +195,13 @@ void ImageCanvas::drawLoupe(QPainter &p) const
     p.drawEllipse(loupeRect);
 
     p.setPen(QColor(230, 230, 230));
-    p.drawText(loupeRect.adjusted(0, kLoupeDiameter + 2, 0, kLoupeDiameter + 18),
-               Qt::AlignHCenter | Qt::AlignTop,
+    const bool labelBelow = loupeRect.bottom() + 20 <= height();
+    const QRectF labelRect =
+        labelBelow ? QRectF(loupeRect.left(), loupeRect.bottom() + 2,
+                            loupeRect.width(), 16)
+                   : QRectF(loupeRect.left(), loupeRect.top() - 18,
+                            loupeRect.width(), 16);
+    p.drawText(labelRect, Qt::AlignHCenter | Qt::AlignVCenter,
                QString::number(m_loupeZoom, 'g', 2) + QStringLiteral("x"));
 }
 
