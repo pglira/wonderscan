@@ -312,3 +312,17 @@ void ImageCanvas::keyPressEvent(QKeyEvent *e)
     }
     QWidget::keyPressEvent(e);
 }
+
+// Repurpose Tab / Shift+Tab to step the selection through the corner points
+// instead of moving focus away from the canvas.
+bool ImageCanvas::focusNextPrevChild(bool next)
+{
+    if (m_page && m_page->hasPoints()) {
+        const int n = m_page->points.size();
+        const int idx = m_activeIndex < 0 ? (next ? 0 : n - 1)
+                                          : (m_activeIndex + (next ? 1 : -1) + n) % n;
+        selectPoint(idx);
+        return true; // consume so focus stays on the canvas
+    }
+    return QWidget::focusNextPrevChild(next);
+}

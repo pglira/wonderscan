@@ -32,6 +32,7 @@ protected:
     void mouseMoveEvent(QMouseEvent *) override;
     void mouseReleaseEvent(QMouseEvent *) override;
     void keyPressEvent(QKeyEvent *) override;
+    bool focusNextPrevChild(bool next) override; // Tab / Shift+Tab cycle corners
 
 private:
     QRectF displayRect() const;   // where the image is drawn within the widget
