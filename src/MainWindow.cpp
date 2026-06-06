@@ -19,6 +19,7 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QImageReader>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
@@ -409,6 +410,7 @@ void MainWindow::selectIndex(int i)
     refreshCurrent();
     syncControlsToCurrent();
     updateStatus();
+    m_canvas->setFocus(); // so digit/arrow keys drive the corner points
 }
 
 void MainWindow::refreshCurrent()
@@ -839,6 +841,21 @@ void MainWindow::closeEvent(QCloseEvent *e)
         e->accept();
     else
         e->ignore();
+}
+
+void MainWindow::keyPressEvent(QKeyEvent *e)
+{
+    // Digit 1..6 selects a corner point for keyboard editing even when focus
+    // sits outside the canvas; arrow-key nudging is handled by the canvas once
+    // it has focus. (If the canvas already has focus it consumes these first.)
+    if (m_current >= 0 && e->key() >= Qt::Key_1 && e->key() <= Qt::Key_6) {
+        m_canvas->setFocus();
+        if (m_canvas->selectPoint(e->key() - Qt::Key_1)) {
+            e->accept();
+            return;
+        }
+    }
+    QMainWindow::keyPressEvent(e);
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *e)

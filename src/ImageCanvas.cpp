@@ -1,6 +1,8 @@
 #include "ImageCanvas.h"
 #include "Page.h"
 
+#include <QFont>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -12,6 +14,8 @@ constexpr double kHandleRadius = 7.0;
 constexpr double kHitRadius = 16.0;
 constexpr int kLoupeDiameter = 160;
 constexpr int kLoupeMargin = 12;
+constexpr double kNudgeStep = 1.0;        // image px per arrow-key press
+constexpr double kNudgeStepCoarse = 10.0; // ... with Shift held
 } // namespace
 
 ImageCanvas::ImageCanvas(QWidget *parent) : QWidget(parent)
@@ -29,7 +33,8 @@ void ImageCanvas::setImage(const QImage &rotated, Page *page)
 {
     m_image = rotated;
     m_page = page;
-    m_dragIndex = -1;
+    m_activeIndex = -1;
+    m_dragging = false;
     update();
 }
 
@@ -37,8 +42,18 @@ void ImageCanvas::clear()
 {
     m_image = QImage();
     m_page = nullptr;
-    m_dragIndex = -1;
+    m_activeIndex = -1;
+    m_dragging = false;
     update();
+}
+
+bool ImageCanvas::selectPoint(int index)
+{
+    if (!m_page || index < 0 || index >= m_page->points.size())
+        return false;
+    m_activeIndex = index;
+    update();
+    return true;
 }
 
 void ImageCanvas::setLoupeZoom(double zoom)
@@ -139,29 +154,40 @@ void ImageCanvas::paintEvent(QPaintEvent *)
                        imageToWidget(m_page->points[4]));
         }
 
-        // Handles.
+        // Handles, each labelled with its 1-based number (for keyboard select).
+        p.save();
+        QFont labelFont = p.font();
+        labelFont.setPixelSize(10);
+        labelFont.setBold(true);
+        p.setFont(labelFont);
         for (int i = 0; i < m_page->points.size(); ++i) {
             const QPointF w = imageToWidget(m_page->points[i]);
             const bool spine = (m_page->mode == Page::Six && (i == 1 || i == 4));
-            QColor fill = (i == m_dragIndex) ? QColor(255, 255, 255)
-                          : spine            ? QColor(255, 200, 60)
-                                             : QColor(60, 200, 120);
+            QColor fill = (i == m_activeIndex) ? QColor(255, 255, 255)
+                          : spine              ? QColor(255, 200, 60)
+                                               : QColor(60, 200, 120);
             p.setPen(QPen(QColor(20, 20, 20), 1.5));
             p.setBrush(fill);
             p.drawEllipse(w, kHandleRadius, kHandleRadius);
-        }
 
-        if (m_dragIndex >= 0)
+            p.setPen(QColor(20, 20, 20));
+            p.drawText(QRectF(w.x() - kHandleRadius, w.y() - kHandleRadius,
+                              2 * kHandleRadius, 2 * kHandleRadius),
+                       Qt::AlignCenter, QString::number(i + 1));
+        }
+        p.restore();
+
+        if (m_activeIndex >= 0)
             drawLoupe(p);
     }
 }
 
 void ImageCanvas::drawLoupe(QPainter &p) const
 {
-    if (m_dragIndex < 0 || !m_page)
+    if (m_activeIndex < 0 || !m_page)
         return;
 
-    const QPointF ip = m_page->points[m_dragIndex]; // image coords
+    const QPointF ip = m_page->points[m_activeIndex]; // image coords
     const double srcD = kLoupeDiameter / m_loupeZoom;
     QRectF srcRect(ip.x() - srcD / 2.0, ip.y() - srcD / 2.0, srcD, srcD);
 
@@ -205,31 +231,84 @@ void ImageCanvas::drawLoupe(QPainter &p) const
                QString::number(m_loupeZoom, 'g', 2) + QStringLiteral("x"));
 }
 
+QPointF ImageCanvas::clampToImage(const QPointF &imagePt) const
+{
+    return QPointF(std::clamp(imagePt.x(), 0.0, double(m_image.width())),
+                   std::clamp(imagePt.y(), 0.0, double(m_image.height())));
+}
+
+// Move the selected point to `imagePt` (clamped to the image) and notify.
+// Requires a valid m_activeIndex on the current page.
+void ImageCanvas::moveActivePoint(const QPointF &imagePt)
+{
+    m_page->points[m_activeIndex] = clampToImage(imagePt);
+    m_page->marked = true;
+    emit pointsChanged();
+    update();
+}
+
 void ImageCanvas::mousePressEvent(QMouseEvent *e)
 {
     if (e->button() == Qt::LeftButton && m_page) {
-        m_dragIndex = handleAt(e->position());
+        const int hit = handleAt(e->position());
+        if (hit >= 0) {
+            m_activeIndex = hit; // also becomes the keyboard selection
+            m_dragging = true;
+        }
         update();
     }
 }
 
 void ImageCanvas::mouseMoveEvent(QMouseEvent *e)
 {
-    if (m_dragIndex >= 0 && m_page) {
-        QPointF ip = widgetToImage(e->position());
-        ip.setX(std::clamp(ip.x(), 0.0, double(m_image.width())));
-        ip.setY(std::clamp(ip.y(), 0.0, double(m_image.height())));
-        m_page->points[m_dragIndex] = ip;
-        m_page->marked = true;
-        emit pointsChanged();
-    }
-    update();
+    if (m_dragging && m_page)
+        moveActivePoint(widgetToImage(e->position()));
 }
 
 void ImageCanvas::mouseReleaseEvent(QMouseEvent *e)
 {
-    if (e->button() == Qt::LeftButton && m_dragIndex >= 0) {
-        m_dragIndex = -1;
+    if (e->button() == Qt::LeftButton && m_dragging) {
+        m_dragging = false; // keep m_activeIndex selected so the loupe stays up
         update();
     }
+}
+
+void ImageCanvas::keyPressEvent(QKeyEvent *e)
+{
+    if (m_page && m_page->hasPoints()) {
+        // Digit 1..N selects the matching corner point.
+        if (e->key() >= Qt::Key_1 && e->key() <= Qt::Key_9
+            && selectPoint(e->key() - Qt::Key_1)) {
+            e->accept();
+            return;
+        }
+
+        // Esc clears the selection (and hides the loupe).
+        if (e->key() == Qt::Key_Escape && m_activeIndex >= 0) {
+            m_activeIndex = -1;
+            update();
+            e->accept();
+            return;
+        }
+
+        // Arrow keys nudge the selected point; Shift = coarse step.
+        if (m_activeIndex >= 0 && m_activeIndex < m_page->points.size()) {
+            const double step = (e->modifiers() & Qt::ShiftModifier) ? kNudgeStepCoarse
+                                                                     : kNudgeStep;
+            double dx = 0.0, dy = 0.0;
+            switch (e->key()) {
+            case Qt::Key_Left:  dx = -step; break;
+            case Qt::Key_Right: dx =  step; break;
+            case Qt::Key_Up:    dy = -step; break;
+            case Qt::Key_Down:  dy =  step; break;
+            default: break;
+            }
+            if (dx != 0.0 || dy != 0.0) {
+                moveActivePoint(m_page->points[m_activeIndex] + QPointF(dx, dy));
+                e->accept();
+                return;
+            }
+        }
+    }
+    QWidget::keyPressEvent(e);
 }

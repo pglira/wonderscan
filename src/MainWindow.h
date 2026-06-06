@@ -26,6 +26,7 @@ protected:
     void closeEvent(QCloseEvent *) override;
     void dragEnterEvent(QDragEnterEvent *) override;
     void dropEvent(QDropEvent *) override;
+    void keyPressEvent(QKeyEvent *) override;
 
 private slots:
     void addImagesDialog();

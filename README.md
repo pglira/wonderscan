@@ -58,8 +58,10 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
    that image's corners.*
 4. Choose **1 page** or **2 pages (6 pts)** per image (toolbar). For spreads,
    toggle **Split spread** (two pages) vs. stitched (one page).
-5. Drag the **corner handles** onto the page edges. The **loupe** (top-left of
-   the canvas, adjustable zoom in the toolbar) helps you place them precisely.
+5. Drag the **corner handles** onto the page edges, or select one by its number
+   (`1`–`4`, or `1`–`6` for a spread — each handle is labelled) and nudge it with
+   the **arrow keys** (`Shift` for a coarse 10 px step; `Esc` to deselect). The
+   **loupe** (adjustable zoom in the toolbar) helps you place them precisely.
 6. The **preview pane** (right) shows the rectified result live.
 7. **Remove** an unwanted image with `Delete`, the toolbar button, or
    right-click → Remove in the filmstrip (removes it from the project only —
@@ -78,4 +80,7 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
 | Export PDF        | `Ctrl+E`        |
 | Rotate left/right | `[` / `]`       |
 | Remove image      | `Delete`        |
-| Previous / next   | `PgUp` / `PgDn` |
+| Previous / next   | `p` / `n`       |
+| Select corner     | `1`–`6`         |
+| Nudge corner      | Arrow keys (`Shift` = 10 px) |
+| Deselect corner   | `Esc`           |
