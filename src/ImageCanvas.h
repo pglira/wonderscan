@@ -40,5 +40,5 @@ private:
     QImage m_image;
     Page *m_page = nullptr;
     int m_dragIndex = -1;
-    double m_loupeZoom = 4.0;
+    double m_loupeZoom = 2.0;
 };

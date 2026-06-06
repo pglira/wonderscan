@@ -179,11 +179,11 @@ void MainWindow::setupActions()
     connect(m_chkSplit, &QCheckBox::toggled, this, &MainWindow::onSplitToggled);
 
     m_actPrev = new QAction(tr("&Previous"), this);
-    m_actPrev->setShortcut(QKeySequence(Qt::Key_PageUp));
+    m_actPrev->setShortcut(QKeySequence(Qt::Key_P));
     connect(m_actPrev, &QAction::triggered, this, &MainWindow::goPrev);
 
     m_actNext = new QAction(tr("&Next"), this);
-    m_actNext->setShortcut(QKeySequence(Qt::Key_PageDown));
+    m_actNext->setShortcut(QKeySequence(Qt::Key_N));
     connect(m_actNext, &QAction::triggered, this, &MainWindow::goNext);
 
     editMenu->addAction(m_actRotL);
@@ -196,13 +196,8 @@ void MainWindow::setupActions()
     editMenu->addAction(m_actPrev);
     editMenu->addAction(m_actNext);
 
-    tb->addAction(actAddImages);
-    tb->addAction(actExport);
-    tb->addSeparator();
     tb->addAction(m_actRotL);
     tb->addAction(m_actRotR);
-    tb->addAction(m_actRotAllL);
-    tb->addAction(m_actRotAllR);
     tb->addAction(m_actRemove);
     tb->addSeparator();
     tb->addWidget(m_chkSixPoint);
@@ -302,9 +297,7 @@ void MainWindow::rebuildFilmstrip()
     QSignalBlocker block(m_filmstrip);
     m_filmstrip->clear();
     for (int i = 0; i < m_pages.size(); ++i) {
-        auto *item = new QListWidgetItem(m_filmstrip);
-        item->setText(QFileInfo(m_pages[i].path).fileName());
-        m_filmstrip->addItem(item);
+        m_filmstrip->addItem(new QListWidgetItem);
         updateFilmstripItem(i);
     }
     if (m_current >= 0 && m_current < m_pages.size())
