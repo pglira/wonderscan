@@ -3,6 +3,8 @@
 A Linux desktop app to mark, perspective-correct (dewarp), and export
 photographed book pages into a single PDF. C++ / Qt6 / OpenCV.
 
+![wonderscan marking a two-page spread, with the dewarped result previewed live](docs/screenshot.png)
+
 ## Build
 
 Dependencies (Ubuntu 24.04): `qt6-base-dev` and `libopencv-dev`.
