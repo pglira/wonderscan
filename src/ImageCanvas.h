@@ -41,5 +41,4 @@ private:
     Page *m_page = nullptr;
     int m_dragIndex = -1;
     double m_loupeZoom = 4.0;
-    QPointF m_cursor;
 };

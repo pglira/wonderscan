@@ -207,7 +207,6 @@ void ImageCanvas::drawLoupe(QPainter &p) const
 
 void ImageCanvas::mousePressEvent(QMouseEvent *e)
 {
-    m_cursor = e->position();
     if (e->button() == Qt::LeftButton && m_page) {
         m_dragIndex = handleAt(e->position());
         update();
@@ -216,7 +215,6 @@ void ImageCanvas::mousePressEvent(QMouseEvent *e)
 
 void ImageCanvas::mouseMoveEvent(QMouseEvent *e)
 {
-    m_cursor = e->position();
     if (m_dragIndex >= 0 && m_page) {
         QPointF ip = widgetToImage(e->position());
         ip.setX(std::clamp(ip.x(), 0.0, double(m_image.width())));

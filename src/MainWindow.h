@@ -51,6 +51,7 @@ private:
     void setupUi();
     void setupActions();
     void addImages(const QStringList &paths);
+    void rotateCurrent(int deltaDegrees);
     void rotateAll(int deltaDegrees);
     void selectIndex(int i);
     void refreshCurrent();
@@ -59,6 +60,7 @@ private:
     QImage renderThumbBase(const QString &path) const;
     void rebuildFilmstrip();
     void syncControlsToCurrent();
+    bool promptExportSettings();
     void setDirty(bool dirty);
     bool maybeSave();
     void updateTitle();

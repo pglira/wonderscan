@@ -49,6 +49,15 @@ bool isSupportedImage(const QString &path)
     return false;
 }
 
+// Apply a 90° rotation step to a page. The marked corners were positioned on
+// the old orientation, so rotating invalidates them.
+void rotatePageBy(Page &p, int deltaDegrees)
+{
+    p.rotation = ((p.rotation + deltaDegrees) % 360 + 360) % 360;
+    p.points.clear();
+    p.marked = false;
+}
+
 } // namespace
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
@@ -58,6 +67,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     setAcceptDrops(true);
     resize(1400, 900);
     updateTitle();
+    syncControlsToCurrent(); // start with no current image -> controls disabled
     updateStatus();
 }
 
@@ -387,6 +397,7 @@ void MainWindow::selectIndex(int i)
         m_current = -1;
         m_canvas->clear();
         m_preview->clear();
+        syncControlsToCurrent();
         updateStatus();
         return;
     }
@@ -498,25 +509,19 @@ void MainWindow::onPointsChanged()
 
 void MainWindow::rotateLeft()
 {
-    if (m_current < 0)
-        return;
-    Page &pg = m_pages[m_current];
-    pg.rotation = ((pg.rotation - 90) % 360 + 360) % 360;
-    pg.points.clear();
-    pg.marked = false;
-    setDirty(true);
-    refreshCurrent();
-    updateFilmstripItem(m_current);
+    rotateCurrent(-90);
 }
 
 void MainWindow::rotateRight()
 {
+    rotateCurrent(90);
+}
+
+void MainWindow::rotateCurrent(int deltaDegrees)
+{
     if (m_current < 0)
         return;
-    Page &pg = m_pages[m_current];
-    pg.rotation = (pg.rotation + 90) % 360;
-    pg.points.clear();
-    pg.marked = false;
+    rotatePageBy(m_pages[m_current], deltaDegrees);
     setDirty(true);
     refreshCurrent();
     updateFilmstripItem(m_current);
@@ -556,11 +561,8 @@ void MainWindow::rotateAll(int deltaDegrees)
             return;
     }
 
-    for (Page &p : m_pages) {
-        p.rotation = ((p.rotation + deltaDegrees) % 360 + 360) % 360;
-        p.points.clear();
-        p.marked = false;
-    }
+    for (Page &p : m_pages)
+        rotatePageBy(p, deltaDegrees);
 
     setDirty(true);
     rebuildFilmstrip(); // refresh every thumbnail at the new rotation
@@ -679,6 +681,47 @@ bool MainWindow::saveProjectAs()
 
 // ---- Export ----------------------------------------------------------------
 
+// Prompt for DPI + JPEG quality. On accept, stores them and marks the project
+// dirty, then returns true; returns false if the user cancels.
+bool MainWindow::promptExportSettings()
+{
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Export settings"));
+    auto *form = new QFormLayout(&dlg);
+
+    auto *dpiSpin = new QSpinBox(&dlg);
+    dpiSpin->setRange(72, 1200);
+    dpiSpin->setValue(m_dpi);
+    dpiSpin->setSuffix(tr(" dpi"));
+    form->addRow(tr("Resolution:"), dpiSpin);
+
+    auto *qSlider = new QSlider(Qt::Horizontal, &dlg);
+    qSlider->setRange(1, 100);
+    qSlider->setValue(m_jpegQuality);
+    auto *qLabel = new QLabel(QString::number(m_jpegQuality), &dlg);
+    connect(qSlider, &QSlider::valueChanged, qLabel,
+            [qLabel](int v) { qLabel->setNum(v); });
+    auto *qRow = new QWidget(&dlg);
+    auto *qLayout = new QFormLayout(qRow);
+    qLayout->setContentsMargins(0, 0, 0, 0);
+    qLayout->addRow(qSlider, qLabel);
+    form->addRow(tr("JPEG quality:"), qRow);
+
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    form->addRow(buttons);
+
+    if (dlg.exec() != QDialog::Accepted)
+        return false;
+
+    m_dpi = dpiSpin->value();
+    m_jpegQuality = qSlider->value();
+    setDirty(true);
+    return true;
+}
+
 void MainWindow::exportPdf()
 {
     if (m_pages.isEmpty()) {
@@ -713,41 +756,8 @@ void MainWindow::exportPdf()
             return;
     }
 
-    // Settings dialog: DPI + JPEG quality.
-    QDialog dlg(this);
-    dlg.setWindowTitle(tr("Export settings"));
-    auto *form = new QFormLayout(&dlg);
-
-    auto *dpiSpin = new QSpinBox(&dlg);
-    dpiSpin->setRange(72, 1200);
-    dpiSpin->setValue(m_dpi);
-    dpiSpin->setSuffix(tr(" dpi"));
-    form->addRow(tr("Resolution:"), dpiSpin);
-
-    auto *qSlider = new QSlider(Qt::Horizontal, &dlg);
-    qSlider->setRange(1, 100);
-    qSlider->setValue(m_jpegQuality);
-    auto *qLabel = new QLabel(QString::number(m_jpegQuality), &dlg);
-    connect(qSlider, &QSlider::valueChanged, qLabel,
-            [qLabel](int v) { qLabel->setNum(v); });
-    auto *qRow = new QWidget(&dlg);
-    auto *qLayout = new QFormLayout(qRow);
-    qLayout->setContentsMargins(0, 0, 0, 0);
-    qLayout->addRow(qSlider, qLabel);
-    form->addRow(tr("JPEG quality:"), qRow);
-
-    auto *buttons = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
-    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    form->addRow(buttons);
-
-    if (dlg.exec() != QDialog::Accepted)
+    if (!promptExportSettings())
         return;
-
-    m_dpi = dpiSpin->value();
-    m_jpegQuality = qSlider->value();
-    setDirty(true);
 
     QString defaultDir;
     if (!m_projectPath.isEmpty())
