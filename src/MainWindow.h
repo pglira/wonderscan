@@ -40,6 +40,7 @@ private slots:
     void removeCurrentImage();
     void moveCurrentImageUp();
     void moveCurrentImageDown();
+    void takeOverPreviousPoints();
     void onPointsChanged();
     void rotateLeft();
     void rotateRight();
@@ -121,4 +122,5 @@ private:
     QAction *m_actRemove = nullptr;
     QAction *m_actMoveUp = nullptr;
     QAction *m_actMoveDown = nullptr;
+    QAction *m_actTakePrev = nullptr;
 };

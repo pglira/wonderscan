@@ -203,6 +203,13 @@ void MainWindow::setupActions()
     m_actMoveDown->setShortcut(QKeySequence(Qt::ALT | Qt::Key_Down));
     connect(m_actMoveDown, &QAction::triggered, this, &MainWindow::moveCurrentImageDown);
 
+    m_actTakePrev = new QAction(tr("Copy Corners from &Previous"), this);
+    m_actTakePrev->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+    m_actTakePrev->setToolTip(
+        tr("Reuse the previous image's corner positions on this one"));
+    connect(m_actTakePrev, &QAction::triggered,
+            this, &MainWindow::takeOverPreviousPoints);
+
     m_chkSixPoint = new QCheckBox(tr("Two pages (6 pts)"), this);
     connect(m_chkSixPoint, &QCheckBox::toggled, this, &MainWindow::onModeToggled);
 
@@ -226,6 +233,8 @@ void MainWindow::setupActions()
     editMenu->addAction(m_actRemove);
     editMenu->addAction(m_actMoveUp);
     editMenu->addAction(m_actMoveDown);
+    editMenu->addSeparator();
+    editMenu->addAction(m_actTakePrev);
     editMenu->addSeparator();
     editMenu->addAction(m_actPrev);
     editMenu->addAction(m_actNext);
@@ -452,6 +461,47 @@ void MainWindow::moveCurrentImage(int delta)
     selectIndex(target);
 }
 
+// Copy the previous image's corner marking onto the current one — useful when
+// consecutive photos are shot from the same position. The points live in
+// rotated-image pixel coordinates, so we also adopt the previous page's
+// mode/split (otherwise the copied points wouldn't fit) and clamp them to this
+// image's bounds in case its dimensions differ; the user can then fine-tune.
+void MainWindow::takeOverPreviousPoints()
+{
+    if (m_current <= 0)
+        return;
+    const Page &prev = m_pages[m_current - 1];
+    if (!prev.marked || !prev.hasPoints()) {
+        statusBar()->showMessage(
+            tr("The previous image has no corners to copy."), 2500);
+        return;
+    }
+
+    Page &cur = m_pages[m_current];
+    cur.mode = prev.mode;
+    cur.splitSpread = prev.splitSpread;
+    cur.points = prev.points;
+    cur.marked = true;
+    m_lastMode = cur.mode;
+    m_lastSplit = cur.splitSpread;
+
+    if (!m_currentOriginal.isNull()) {
+        const bool swap = (cur.rotation % 180) != 0; // 90/270 swaps W/H
+        const double w = swap ? m_currentOriginal.height() : m_currentOriginal.width();
+        const double h = swap ? m_currentOriginal.width() : m_currentOriginal.height();
+        for (QPointF &p : cur.points) {
+            p.setX(qBound(0.0, p.x(), w));
+            p.setY(qBound(0.0, p.y(), h));
+        }
+    }
+
+    setDirty(true);
+    refreshCurrent();
+    syncControlsToCurrent();
+    updateFilmstripItem(m_current);
+    updateStatus();
+}
+
 // ---- Selection / current image ---------------------------------------------
 
 void MainWindow::selectIndex(int i)
@@ -543,6 +593,7 @@ void MainWindow::syncControlsToCurrent()
     m_actRemove->setEnabled(has);
     m_actMoveUp->setEnabled(has && m_current > 0);
     m_actMoveDown->setEnabled(has && m_current < m_pages.size() - 1);
+    m_actTakePrev->setEnabled(has && m_current > 0 && m_pages[m_current - 1].marked);
     m_chkSixPoint->setEnabled(has);
 
     if (!has) {

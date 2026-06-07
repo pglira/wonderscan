@@ -66,7 +66,9 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
    e.g. Up+Left, to move diagonally; `Shift` and `Ctrl+Shift` give larger steps;
    `Esc` to deselect). The **loupe** helps
    you place them precisely. Nudge step sizes and the loupe zoom are set in
-   **Edit → Settings** (and remembered between sessions).
+   **Edit → Settings** (and remembered between sessions). When consecutive shots
+   share the same framing, press `Ctrl+D` to reuse the previous image's corners
+   on the current one as a starting point.
 6. The **preview pane** (right) shows the rectified result live.
 7. **Remove** an unwanted image with `Delete`, the toolbar button, or
    right-click → Remove in the filmstrip (removes it from the project only —
@@ -94,5 +96,6 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
 | Cycle corners     | `Tab` / `Shift+Tab` |
 | Nudge corner      | Arrow keys (hold two for diagonal; `Shift` / `Ctrl+Shift` = larger steps) |
 | Deselect corner   | `Esc`           |
+| Copy corners from previous | `Ctrl+D` |
 
 Nudge step sizes and loupe zoom are configurable in **Edit → Settings**.
