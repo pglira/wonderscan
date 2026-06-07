@@ -1,7 +1,11 @@
 #include "LoupeView.h"
 
+#include "Page.h"
+
 #include <QPainter>
+#include <QPolygonF>
 #include <algorithm>
+#include <initializer_list>
 
 namespace {
 constexpr int kSize = 220;  // square side of the magnified viewport
@@ -22,6 +26,18 @@ LoupeView::LoupeView(QWidget *parent) : QWidget(parent)
 void LoupeView::setImage(const QImage &image)
 {
     m_image = image;
+    update();
+}
+
+void LoupeView::setPage(const Page *page)
+{
+    m_page = page;
+    update();
+}
+
+void LoupeView::setExportInset(int px)
+{
+    m_inset = std::max(0, px);
     update();
 }
 
@@ -72,6 +88,9 @@ void LoupeView::paintEvent(QPaintEvent *)
     QRectF srcRect(m_center.x() - srcD / 2.0, m_center.y() - srcD / 2.0, srcD, srcD);
     p.drawImage(view, m_image, srcRect);
 
+    // The same boundary lines the canvas draws, magnified to match.
+    drawOutline(p, view, srcD);
+
     // Crosshair at centre + border, matching the old in-canvas loupe styling.
     p.setPen(QPen(QColor(255, 80, 80), 1.2));
     const QPointF c = view.center();
@@ -84,4 +103,55 @@ void LoupeView::paintEvent(QPaintEvent *)
     p.setPen(QColor(230, 230, 230));
     p.drawText(view.adjusted(0, 0, -4, -2), Qt::AlignRight | Qt::AlignBottom,
                QString::number(m_zoom, 'g', 2) + QStringLiteral("x"));
+}
+
+// Overlay the marked quad(s), spine, and export-inset boundary -- the same lines
+// ImageCanvas draws -- mapped from image space into the magnified viewport and
+// clipped to it. `srcD` is the side of the source window shown in `view`.
+void LoupeView::drawOutline(QPainter &p, const QRectF &view, double srcD) const
+{
+    if (!m_page || !m_page->hasPoints() || srcD <= 0)
+        return;
+
+    const QPointF srcTL(m_center.x() - srcD / 2.0, m_center.y() - srcD / 2.0);
+    const double k = view.width() / srcD; // == m_zoom
+    auto map = [&](const QPointF &ip) { return view.topLeft() + (ip - srcTL) * k; };
+    auto polyOf = [&](const QVector<QPointF> &pts, std::initializer_list<int> idx) {
+        QPolygonF poly;
+        for (int i : idx)
+            poly << map(pts[i]);
+        return poly;
+    };
+
+    p.save();
+    p.setClipRect(view);
+    p.setBrush(Qt::NoBrush);
+
+    // Marked quad(s) (dashed green) + spine (dashed yellow), matching the canvas.
+    p.setPen(QPen(QColor(60, 200, 120), 1.5, Qt::DashLine));
+    if (m_page->mode == Page::Four) {
+        p.drawPolygon(polyOf(m_page->points, {0, 1, 2, 3}));
+    } else {
+        p.drawPolygon(polyOf(m_page->points, {0, 1, 4, 5}));
+        p.drawPolygon(polyOf(m_page->points, {1, 2, 3, 4}));
+        p.setPen(QPen(QColor(255, 200, 60), 1.5, Qt::DashLine));
+        p.drawLine(map(m_page->points[1]), map(m_page->points[4]));
+    }
+
+    // Export-inset boundary (dashed cyan).
+    if (m_inset > 0) {
+        const QVector<QPointF> in =
+            insetPoints(m_page->points, m_page->mode, m_inset);
+        if (in.size() == m_page->points.size()) {
+            p.setPen(QPen(QColor(70, 200, 255), 1.5, Qt::DashLine));
+            if (m_page->mode == Page::Four) {
+                p.drawPolygon(polyOf(in, {0, 1, 2, 3}));
+            } else {
+                p.drawPolygon(polyOf(in, {0, 1, 4, 5}));
+                p.drawPolygon(polyOf(in, {1, 2, 3, 4}));
+            }
+        }
+    }
+
+    p.restore();
 }

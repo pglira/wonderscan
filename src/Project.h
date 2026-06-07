@@ -10,6 +10,7 @@ struct Project {
     QVector<Page> pages;
     int dpi = 300;
     int jpegQuality = 85;
+    int inset = 0;           // inward export offset in px (0 = off)
 };
 
 namespace ProjectIO {

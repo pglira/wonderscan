@@ -133,7 +133,8 @@ bool exportPdf(const QString &outPath,
                int dpi,
                int jpegQuality,
                QString *error,
-               bool equalPageWidths)
+               bool equalPageWidths,
+               int insetPx)
 {
     if (dpi <= 0)
         dpi = 300;
@@ -152,8 +153,10 @@ bool exportPdf(const QString &outPath,
         }
 
         QImage rotated = Warp::applyRotation(original, p->rotation);
+        const QVector<QPointF> pts =
+            insetPoints(p->points, p->mode, insetPx); // no-op when insetPx == 0
         QVector<QImage> rendered =
-            Warp::renderPages(rotated, p->points, p->mode, p->splitSpread,
+            Warp::renderPages(rotated, pts, p->mode, p->splitSpread,
                               equalPageWidths);
         if (rendered.isEmpty()) {
             if (error)

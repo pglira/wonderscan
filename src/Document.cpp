@@ -90,6 +90,7 @@ bool Document::load(const QString &path, QString *error)
     m_pages = project.pages;
     m_dpi = project.dpi;
     m_jpegQuality = project.jpegQuality;
+    m_inset = project.inset;
     m_path = path;
 
     m_thumbs.clear();
@@ -107,6 +108,7 @@ bool Document::save(const QString &path, QString *error)
     project.pages = m_pages;
     project.dpi = m_dpi;
     project.jpegQuality = m_jpegQuality;
+    project.inset = m_inset;
 
     if (!ProjectIO::save(path, project, error))
         return false;

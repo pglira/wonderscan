@@ -5,8 +5,10 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPolygonF>
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 
 namespace {
 constexpr double kHandleRadius = 7.0;
@@ -72,6 +74,12 @@ void ImageCanvas::setNudgeSteps(double fine, double coarse, double large)
     m_nudgeLarge = large;
 }
 
+void ImageCanvas::setExportInset(int px)
+{
+    m_exportInset = std::max(0, px);
+    update();
+}
+
 QRectF ImageCanvas::displayRect() const
 {
     if (m_image.isNull())
@@ -129,6 +137,30 @@ void ImageCanvas::drawQuad(QPainter &p, const QVector<int> &idx) const
     p.drawPolygon(poly);
 }
 
+void ImageCanvas::drawInsetOverlay(QPainter &p) const
+{
+    const QVector<QPointF> in =
+        insetPoints(m_page->points, m_page->mode, m_exportInset);
+    if (in.size() != m_page->points.size())
+        return;
+
+    auto mapPoly = [this, &in](std::initializer_list<int> idx) {
+        QPolygonF poly;
+        for (int i : idx)
+            poly << imageToWidget(in[i]);
+        return poly;
+    };
+
+    p.setPen(QPen(QColor(70, 200, 255), 1.5, Qt::DashLine)); // cyan
+    p.setBrush(Qt::NoBrush);
+    if (m_page->mode == Page::Four) {
+        p.drawPolygon(mapPoly({0, 1, 2, 3}));
+    } else {
+        p.drawPolygon(mapPoly({0, 1, 4, 5})); // left
+        p.drawPolygon(mapPoly({1, 2, 3, 4})); // right
+    }
+}
+
 void ImageCanvas::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
@@ -148,7 +180,7 @@ void ImageCanvas::paintEvent(QPaintEvent *)
 
     if (m_page && m_page->hasPoints()) {
         // Quad outline(s).
-        QPen quadPen(QColor(60, 200, 120), 2);
+        QPen quadPen(QColor(60, 200, 120), 2, Qt::DashLine);
         p.setPen(quadPen);
         p.setBrush(Qt::NoBrush);
 
@@ -163,6 +195,11 @@ void ImageCanvas::paintEvent(QPaintEvent *)
             p.drawLine(imageToWidget(m_page->points[1]),
                        imageToWidget(m_page->points[4]));
         }
+
+        // The inset boundary that will actually be exported (dashed, on top of
+        // the marked quad).
+        if (m_exportInset > 0)
+            drawInsetOverlay(p);
 
         // Handles, each labelled with its 1-based number (for keyboard select).
         p.save();

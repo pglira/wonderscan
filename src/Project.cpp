@@ -32,6 +32,7 @@ bool save(const QString &path, const Project &project, QString *error)
     QJsonObject exportObj;
     exportObj["dpi"] = project.dpi;
     exportObj["jpegQuality"] = project.jpegQuality;
+    exportObj["inset"] = project.inset;
 
     QJsonObject root;
     root["version"] = 1;
@@ -73,6 +74,7 @@ bool load(const QString &path, Project *project, QString *error)
     const QJsonObject exportObj = root["export"].toObject();
     result.dpi = exportObj.value("dpi").toInt(300);
     result.jpegQuality = exportObj.value("jpegQuality").toInt(85);
+    result.inset = exportObj.value("inset").toInt(0);
 
     for (const QJsonValue &v : root["images"].toArray()) {
         const QJsonObject o = v.toObject();

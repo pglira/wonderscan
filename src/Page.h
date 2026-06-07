@@ -42,3 +42,14 @@ QVector<QPointF> defaultInsetPoints(const QSize &imageSize, Page::Mode mode);
 // doesn't, or if `from == to`.
 QVector<QPointF> convertPoints(const QVector<QPointF> &pts,
                                Page::Mode from, Page::Mode to);
+
+// Shrink the marked quad(s) inward by `inset` pixels, in the rotated-image
+// coordinate space, returning the point set that should actually be exported:
+//   Four: each corner moves to the intersection of its two edges offset inward.
+//   Six : the four *outer* corners move the same way, while the spine endpoints
+//         move inward along the spine toward each other -- so the spine line is
+//         kept (a stitched spread stays seamless), only its ends shrink.
+// `inset` is clamped per quad so it can never collapse/invert the shape. Returns
+// `pts` unchanged for `inset <= 0` or a point count that doesn't match `mode`.
+QVector<QPointF> insetPoints(const QVector<QPointF> &pts, Page::Mode mode,
+                             double inset);

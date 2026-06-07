@@ -24,6 +24,10 @@ public:
     // Arrow-key nudge distances (image px): plain / +Shift / +Ctrl+Shift.
     void setNudgeSteps(double fine, double coarse, double large);
 
+    // Inward export offset (px): when > 0, the inset boundary that will actually
+    // be exported is drawn over the marked quad. Purely a visual overlay.
+    void setExportInset(int px);
+
 signals:
     void pointsChanged(); // a handle was moved (page->marked is set true)
 
@@ -52,12 +56,14 @@ private:
     void moveActivePoint(const QPointF &imagePt); // clamp, store, mark, emit, repaint
     void nudgeByHeldArrows(Qt::KeyboardModifiers mods); // combined-direction nudge
     void drawQuad(QPainter &p, const QVector<int> &idx) const;
+    void drawInsetOverlay(QPainter &p) const; // dashed inner boundary (export inset)
     void emitLoupeTarget(); // notify listeners of the current active-point state
 
     QImage m_image;
     Page *m_page = nullptr;
     int m_activeIndex = -1;  // selected/highlighted point (mouse or keyboard), or -1
     bool m_dragging = false; // left button is currently dragging m_activeIndex
+    int m_exportInset = 0;   // inward export offset to visualise (px), 0 = none
     double m_nudgeFine = 1.0;    // arrow-key step (image px)
     double m_nudgeCoarse = 10.0; // ... with Shift
     double m_nudgeLarge = 25.0;  // ... with Ctrl+Shift

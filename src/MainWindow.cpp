@@ -106,6 +106,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     resize(1400, 900); // restore size; the window opens maximized (see main.cpp)
     updateTitle();
     syncControlsToCurrent(); // start with no current image -> controls disabled
+    syncInsetControl();
     updateStatus();
 }
 
@@ -280,6 +281,15 @@ void MainWindow::setupActions()
     m_chkSplit->setChecked(false);
     connect(m_chkSplit, &QCheckBox::toggled, this, &MainWindow::onSplitToggled);
 
+    m_insetSpin = new QSpinBox(this);
+    m_insetSpin->setRange(0, 2000);
+    m_insetSpin->setSuffix(tr(" px"));
+    m_insetSpin->setToolTip(
+        tr("Shrink the marked area inward by this many pixels before export, so "
+           "the page edges are cropped off (0 = export the marked area as-is)"));
+    connect(m_insetSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &MainWindow::onInsetChanged);
+
     m_actPrev = new QAction(tr("&Previous"), this);
     m_actPrev->setShortcut(QKeySequence(Qt::Key_P));
     connect(m_actPrev, &QAction::triggered, this, &MainWindow::goPrev);
@@ -319,6 +329,9 @@ void MainWindow::setupActions()
     tb->addWidget(m_chkSixPoint);
     tb->addWidget(new QLabel(QStringLiteral("  ")));
     tb->addWidget(m_chkSplit);
+    tb->addSeparator();
+    tb->addWidget(new QLabel(tr("Inset:")));
+    tb->addWidget(m_insetSpin);
     tb->addSeparator();
     tb->addAction(m_actPrev);
     tb->addAction(m_actNext);
@@ -672,6 +685,7 @@ void MainWindow::selectIndex(int i)
         m_canvas->clear();
         m_preview->clear();
         m_loupe->clear();
+        m_loupe->setPage(nullptr);
         syncControlsToCurrent();
         updateStatus();
         return;
@@ -704,6 +718,7 @@ void MainWindow::refreshCurrent()
         m_canvas->clear();
         m_preview->clear();
         m_loupe->clear();
+        m_loupe->setPage(nullptr);
         return;
     }
 
@@ -724,9 +739,10 @@ void MainWindow::refreshCurrent()
         m_currentProxy = m_currentRotated;
     }
 
-    // Give the loupe the image first: the next line emits loupeTargetChanged,
-    // which makes the loupe paint using that image.
+    // Give the loupe the image + page first: the next line emits
+    // loupeTargetChanged, which makes the loupe paint using them.
     m_loupe->setImage(m_currentRotated);
+    m_loupe->setPage(&pg);
     m_canvas->setImage(m_currentRotated, &pg);
     updatePreview();
 }
@@ -742,9 +758,13 @@ void MainWindow::updatePreview()
         m_preview->clear();
         return;
     }
+    // Preview the exact exported geometry: dewarp the inset (interior) points,
+    // the same ones PdfExporter renders. With inset 0 this is the marked quad.
+    const QVector<QPointF> exported =
+        insetPoints(pg.points, pg.mode, m_doc.inset());
     QVector<QPointF> scaled;
-    scaled.reserve(pg.points.size());
-    for (const QPointF &p : pg.points)
+    scaled.reserve(exported.size());
+    for (const QPointF &p : exported)
         scaled.push_back(p * m_proxyScale);
 
     m_preview->setPages(
@@ -768,6 +788,7 @@ void MainWindow::syncControlsToCurrent()
     m_actAutoDetectAll->setEnabled(anyImages);
     m_actRotAllL->setEnabled(anyImages);
     m_actRotAllR->setEnabled(anyImages);
+    m_insetSpin->setEnabled(anyImages); // project-level: needs only some images
     m_chkSixPoint->setEnabled(has);
 
     if (!has) {
@@ -893,6 +914,25 @@ void MainWindow::onSplitToggled(bool split)
     updatePreview();
 }
 
+// Project-level export inset changed from the toolbar: store it, mirror it onto
+// the canvas + preview overlays live, and mark the project dirty.
+void MainWindow::onInsetChanged(int px)
+{
+    m_doc.setInset(px);
+    setDirty(true);
+    m_canvas->setExportInset(px);
+    m_loupe->setExportInset(px);
+    updatePreview();
+}
+
+void MainWindow::syncInsetControl()
+{
+    QSignalBlocker block(m_insetSpin); // setValue must not mark the project dirty
+    m_insetSpin->setValue(m_doc.inset());
+    m_canvas->setExportInset(m_doc.inset());
+    m_loupe->setExportInset(m_doc.inset());
+}
+
 void MainWindow::goPrev()
 {
     if (m_current > 0)
@@ -932,6 +972,7 @@ bool MainWindow::loadProjectFile(const QString &path)
     rebuildFilmstrip();
     setDirty(false);
     selectIndex(m_doc.isEmpty() ? -1 : 0);
+    syncInsetControl(); // reflect the project's saved inset on the spin box/canvas
     updateTitle();
     addToRecent(path);
     setLastDir(QFileInfo(path).absolutePath());
@@ -1208,7 +1249,7 @@ void MainWindow::exportPdf()
     QString err;
     const bool ok = PdfExporter::exportPdf(out, ready, m_doc.dpi(),
                                            m_doc.jpegQuality(), &err,
-                                           m_prefs.equalPageWidths);
+                                           m_prefs.equalPageWidths, m_doc.inset());
     QApplication::restoreOverrideCursor();
 
     if (ok) {

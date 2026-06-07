@@ -4,7 +4,8 @@
 #include <QImage>
 #include <QVector>
 
-// Shows the live dewarped result: one rectified page, or two side by side.
+// Shows the live dewarped result -- exactly what will be exported (the inset
+// interior when an export inset is set): one rectified page, or two side by side.
 class PreviewPane : public QWidget {
     Q_OBJECT
 public:

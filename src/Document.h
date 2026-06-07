@@ -48,6 +48,11 @@ public:
     void setDpi(int dpi) { m_dpi = dpi; }
     int jpegQuality() const { return m_jpegQuality; }
     void setJpegQuality(int q) { m_jpegQuality = q; }
+    // Inward offset (px, rotated-image space): export shrinks each marked quad by
+    // this much, so the marked corners can sit on the page edge but the messy
+    // boundary is cropped out. 0 = export the marked quad as-is.
+    int inset() const { return m_inset; }
+    void setInset(int px) { m_inset = px; }
 
     // ---- identity / dirty ---------------------------------------------------
     QString path() const { return m_path; }
@@ -77,6 +82,7 @@ private:
     QVector<QImage> m_thumbs; // base thumbnails (EXIF-corrected, unrotated), 1:1 with pages
     int m_dpi = 300;
     int m_jpegQuality = 85;
+    int m_inset = 20;         // inward export offset in px (0 = off); new-doc default
     QString m_path;           // project file path ("" until first save)
     bool m_dirty = false;
 };

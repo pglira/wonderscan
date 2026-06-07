@@ -16,6 +16,7 @@ class QAction;
 class QCheckBox;
 class QLabel;
 class QMenu;
+class QSpinBox;
 class PageDetector;
 
 class MainWindow : public QMainWindow {
@@ -55,6 +56,7 @@ private slots:
     void rotateAllRight();
     void onModeToggled(bool six);
     void onSplitToggled(bool split);
+    void onInsetChanged(int px);
     void goPrev();
     void goNext();
     void openSettingsDialog();
@@ -72,6 +74,7 @@ private:
     void updateFilmstripItem(int i);
     void rebuildFilmstrip();
     void syncControlsToCurrent();
+    void syncInsetControl(); // push the project inset to the spin box + canvas
     bool promptExportSettings();
     bool loadProjectFile(const QString &path);
     void loadSettings();
@@ -113,6 +116,7 @@ private:
     // Controls / actions
     QCheckBox *m_chkSixPoint = nullptr;
     QCheckBox *m_chkSplit = nullptr;
+    QSpinBox *m_insetSpin = nullptr;
     QAction *m_actPrev = nullptr;
     QAction *m_actNext = nullptr;
     QAction *m_actRotL = nullptr;

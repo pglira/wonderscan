@@ -110,11 +110,35 @@ static int runModelTests()
     WS_CHECK(convertPoints(quad, Page::Four, Page::Four) == quad);
     WS_CHECK(convertPoints(quad, Page::Six, Page::Four) == quad);
 
+    // ---- inward point offset (export inset) ----
+    auto near = [](const QPointF &a, const QPointF &b) {
+        return std::abs(a.x() - b.x()) < 1e-6 && std::abs(a.y() - b.y()) < 1e-6;
+    };
+    // 4-pt: an axis-aligned rect shrinks by `inset` on every side.
+    const QVector<QPointF> rect = {{0, 0}, {100, 0}, {100, 200}, {0, 200}};
+    const QVector<QPointF> rIn = insetPoints(rect, Page::Four, 10);
+    WS_CHECK(rIn.size() == 4);
+    WS_CHECK(near(rIn[0], {10, 10}) && near(rIn[1], {90, 10}));
+    WS_CHECK(near(rIn[2], {90, 190}) && near(rIn[3], {10, 190}));
+    // 6-pt: outer corners shrink inward; spine endpoints slide along the spine
+    // (x unchanged) so the spine line stays put.
+    const QVector<QPointF> hex = {{0, 0}, {50, 0}, {100, 0},
+                                  {100, 100}, {50, 100}, {0, 100}};
+    const QVector<QPointF> hIn = insetPoints(hex, Page::Six, 10);
+    WS_CHECK(hIn.size() == 6);
+    WS_CHECK(near(hIn[0], {10, 10}) && near(hIn[2], {90, 10}));   // TL, TR
+    WS_CHECK(near(hIn[3], {90, 90}) && near(hIn[5], {10, 90}));   // BR, BL
+    WS_CHECK(near(hIn[1], {50, 10}) && near(hIn[4], {50, 90}));   // spine ends
+    // guards: no offset, or a point count that doesn't match `mode`, return input.
+    WS_CHECK(insetPoints(rect, Page::Four, 0) == rect);
+    WS_CHECK(insetPoints(rect, Page::Six, 10) == rect);
+
     // ---- project I/O round-trip ----
     Document src;
     src.addImages({"/img/p1.jpg", "/img/p2.jpg"}, Page::Four, false);
     src.setDpi(600);
     src.setJpegQuality(72);
+    src.setInset(15);
     src.page(0).rotation = 180;
     src.page(0).marked = true;
     src.page(0).points = {{10, 20}, {110, 22}, {108, 210}, {12, 208}};
@@ -135,6 +159,7 @@ static int runModelTests()
     WS_CHECK(!dst.dirty());        // ...and clears dirty
     WS_CHECK(dst.path() == wsp);
     WS_CHECK(dst.dpi() == 600 && dst.jpegQuality() == 72);
+    WS_CHECK(dst.inset() == 15);
     WS_CHECK(dst.pageCount() == 2);
 
     for (int i = 0; i < 2; ++i) {
@@ -203,6 +228,17 @@ static int runSelfTest(const QString &outPdf)
     QVector<QImage> one = Warp::renderPages(src, pg.points, pg.mode, pg.splitSpread);
     if (one.size() != 1 || one[0].isNull()) {
         qCritical() << "selftest: four-point renderPages failed";
+        return 1;
+    }
+
+    // Export inset: rendering the inset quad (what PdfExporter dewarps when the
+    // project's inset > 0) yields a strictly smaller page than the full quad.
+    QVector<QImage> insetOne = Warp::renderPages(
+        src, insetPoints(pg.points, pg.mode, 40), pg.mode, pg.splitSpread);
+    if (insetOne.size() != 1 || insetOne[0].isNull()
+        || insetOne[0].width() >= one[0].width()
+        || insetOne[0].height() >= one[0].height()) {
+        qCritical() << "selftest: inset should shrink the rendered page";
         return 1;
     }
 
