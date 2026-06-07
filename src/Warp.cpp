@@ -119,7 +119,8 @@ QImage applyRotation(const QImage &src, int rotation)
 QVector<QImage> renderPages(const QImage &rotated,
                             const QVector<QPointF> &points,
                             Page::Mode mode,
-                            bool splitSpread)
+                            bool splitSpread,
+                            bool equalPageWidths)
 {
     const int expected = (mode == Page::Four) ? 4 : 6;
     if (points.size() != expected || rotated.isNull())
@@ -140,10 +141,16 @@ QVector<QImage> renderPages(const QImage &rotated,
     // spine column is sampled identically on both sides (continuous seam).
     const int H = std::max(1, int(std::lround(
         std::max({dist(tl, bl), dist(topS, botS), dist(tr, br)}))));
-    const int WL = std::max(1, int(std::lround(
+    int WL = std::max(1, int(std::lround(
         std::max(dist(tl, topS), dist(bl, botS)))));
-    const int WR = std::max(1, int(std::lround(
+    int WR = std::max(1, int(std::lround(
         std::max(dist(topS, tr), dist(botS, br)))));
+
+    // Optionally force both halves to a common width (their average), so split
+    // pages match and a stitched spread's spine sits at the centre. The seam
+    // stays continuous either way (anchored on topS/botS and the shared H).
+    if (equalPageWidths)
+        WL = WR = std::max(1, (WL + WR + 1) / 2);
 
     // Left half: the spine is its right edge. Right half: the spine is its left
     // edge. Both share topS/botS and the same H, so the seam matches exactly.

@@ -59,7 +59,9 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
 3. **Rotate** the source upright if needed (`[` / `]`). *Note: rotating resets
    that image's corners.*
 4. Choose **1 page** or **2 pages (6 pts)** per image (toolbar). For spreads,
-   toggle **Split spread** (two pages) vs. stitched (one page).
+   toggle **Split spread** (two pages) vs. stitched (one page). By default both
+   halves of a spread are rendered at the same width (centred spine); turn this
+   off in **Edit → Settings** to keep each half's measured width.
 5. Drag the **corner handles** onto the page edges, or select one by its number
    (`1`–`4`, or `1`–`6` for a spread — each handle is labelled; `Tab` /
    `Shift+Tab` step through them) and nudge it with the **arrow keys** (hold two,
@@ -98,4 +100,5 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
 | Deselect corner   | `Esc`           |
 | Copy corners from previous | `Ctrl+D` |
 
-Nudge step sizes and loupe zoom are configurable in **Edit → Settings**.
+Nudge step sizes, loupe zoom, and equal-width spreads are configurable in
+**Edit → Settings**.

@@ -119,6 +119,25 @@ static int runSelfTest(const QString &outPdf)
         return 1;
     }
 
+    // Equal-width spreads: spts is deliberately asymmetric (WL != WR), so the
+    // halves differ normally but must come out the same width once forced equal.
+    QVector<QImage> uneq = Warp::renderPages(spread, spts, Page::Six, true);
+    QVector<QImage> eqd =
+        Warp::renderPages(spread, spts, Page::Six, true, /*equalPageWidths=*/true);
+    if (uneq.size() != 2 || eqd.size() != 2) {
+        qCritical() << "selftest: equal-width split should yield 2 pages";
+        return 1;
+    }
+    if (uneq[0].width() == uneq[1].width()) {
+        qCritical() << "selftest: test spread is not asymmetric (weak guard)";
+        return 1;
+    }
+    if (eqd[0].width() != eqd[1].width()) {
+        qCritical() << "selftest: equal-width split halves differ:"
+                    << eqd[0].width() << "vs" << eqd[1].width();
+        return 1;
+    }
+
     QVector<const Page *> ex{&pg};
     QString err;
     if (!PdfExporter::exportPdf(outPdf, ex, 300, 85, &err)) {

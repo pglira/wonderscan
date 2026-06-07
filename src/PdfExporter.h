@@ -13,11 +13,13 @@ namespace PdfExporter {
 // dewarped pixel size divided by `dpi`.
 //
 // Returns false and sets *error on failure. `pages` must already be filtered
-// to export-ready pages.
+// to export-ready pages. `equalPageWidths` is forwarded to the spread renderer
+// (see Warp::renderPages).
 bool exportPdf(const QString &outPath,
                const QVector<const Page *> &pages,
                int dpi,
                int jpegQuality,
-               QString *error);
+               QString *error,
+               bool equalPageWidths = false);
 
 } // namespace PdfExporter

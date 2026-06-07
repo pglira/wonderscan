@@ -49,6 +49,7 @@ const QString kNudgeFineKey = QStringLiteral("nudge/fine");
 const QString kNudgeCoarseKey = QStringLiteral("nudge/coarse");
 const QString kNudgeLargeKey = QStringLiteral("nudge/large");
 const QString kLoupeKey = QStringLiteral("loupe/zoom");
+const QString kEqualWidthsKey = QStringLiteral("render/equalPageWidths");
 
 bool isSupportedImage(const QString &path)
 {
@@ -582,7 +583,8 @@ void MainWindow::updatePreview()
         scaled.push_back(p * m_proxyScale);
 
     m_preview->setPages(
-        Warp::renderPages(m_currentProxy, scaled, pg.mode, pg.splitSpread));
+        Warp::renderPages(m_currentProxy, scaled, pg.mode, pg.splitSpread,
+                          m_equalPageWidths));
 }
 
 void MainWindow::syncControlsToCurrent()
@@ -825,6 +827,7 @@ void MainWindow::loadSettings()
     m_nudgeCoarse = s.value(kNudgeCoarseKey, m_nudgeCoarse).toInt();
     m_nudgeLarge = s.value(kNudgeLargeKey, m_nudgeLarge).toInt();
     m_loupeZoom = s.value(kLoupeKey, m_loupeZoom).toDouble();
+    m_equalPageWidths = s.value(kEqualWidthsKey, m_equalPageWidths).toBool();
     m_lastDir = s.value(kLastDirKey).toString();
 
     applyEditorSettings();
@@ -925,6 +928,11 @@ void MainWindow::openSettingsDialog()
     loupe->setValue(m_loupeZoom);
     form->addRow(tr("Loupe zoom:"), loupe);
 
+    auto *equalWidths =
+        new QCheckBox(tr("Equal page widths in two-page spreads"), &dlg);
+    equalWidths->setChecked(m_equalPageWidths);
+    form->addRow(equalWidths);
+
     auto *buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
@@ -938,14 +946,17 @@ void MainWindow::openSettingsDialog()
     m_nudgeCoarse = coarse->value();
     m_nudgeLarge = large->value();
     m_loupeZoom = loupe->value();
+    m_equalPageWidths = equalWidths->isChecked();
 
     QSettings s;
     s.setValue(kNudgeFineKey, m_nudgeFine);
     s.setValue(kNudgeCoarseKey, m_nudgeCoarse);
     s.setValue(kNudgeLargeKey, m_nudgeLarge);
     s.setValue(kLoupeKey, m_loupeZoom);
+    s.setValue(kEqualWidthsKey, m_equalPageWidths);
 
     applyEditorSettings();
+    updatePreview(); // reflect the spread-width change live (no-op if no image)
 }
 
 // ---- Export ----------------------------------------------------------------
@@ -1044,7 +1055,8 @@ void MainWindow::exportPdf()
 
     QApplication::setOverrideCursor(Qt::WaitCursor);
     QString err;
-    const bool ok = PdfExporter::exportPdf(out, ready, m_dpi, m_jpegQuality, &err);
+    const bool ok = PdfExporter::exportPdf(out, ready, m_dpi, m_jpegQuality, &err,
+                                           m_equalPageWidths);
     QApplication::restoreOverrideCursor();
 
     if (ok) {

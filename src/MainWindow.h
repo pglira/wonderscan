@@ -96,6 +96,7 @@ private:
     int m_nudgeCoarse = 10;
     int m_nudgeLarge = 25;
     double m_loupeZoom = 2.0;
+    bool m_equalPageWidths = true; // force equal widths for 6-point spread halves
 
     // Current-image working state
     QImage m_currentOriginal; // EXIF-corrected, unrotated
