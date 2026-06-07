@@ -7,15 +7,25 @@ photographed book pages into a single PDF. C++ / Qt6 / OpenCV.
 
 ## Build
 
-Dependencies (Ubuntu 24.04): `qt6-base-dev` and `libopencv-dev`.
+Dependencies (Ubuntu 24.04): `qt6-base-dev`, `libopencv-dev`, and
+[ONNX Runtime](https://github.com/microsoft/onnxruntime/releases) (used by the
+**Auto-detect Corners** feature; the system OpenCV is too old to run the model).
 
 ```bash
 sudo apt install qt6-base-dev libopencv-dev    # qt6-base-dev usually already present
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+# ONNX Runtime: extract a linux-x64 release tarball somewhere, e.g.:
+#   tar xzf onnxruntime-linux-x64-1.20.1.tgz -C ~/.local && \
+#     ln -sfn ~/.local/onnxruntime-linux-x64-1.20.1 ~/.local/onnxruntime
+
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+      -DONNXRUNTIME_ROOT="$HOME/.local/onnxruntime"   # default if omitted
 cmake --build build -j"$(nproc)"
 ```
 
-The binary is `build/wonderscan`.
+The binary is `build/wonderscan`. The page-detection model lives at
+`models/page-seg.onnx`; see that file's provenance and retraining steps in the
+training project's `README.md`.
 
 ## Install
 
@@ -70,7 +80,12 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
    you place them precisely. Nudge step sizes and the loupe zoom are set in
    **Edit → Settings** (and remembered between sessions). When consecutive shots
    share the same framing, press `Ctrl+D` to reuse the previous image's corners
-   on the current one as a starting point.
+   on the current one as a starting point. Or press `Ctrl+Shift+D`
+   (**Edit → Auto-detect Corners**) to have the page corners found automatically
+   — one page becomes a 4-point quad, a two-page spread becomes a 6-point spread;
+   then fine-tune by nudging. (Rotate the image upright first — the detector
+   expects upright pages.) To pre-fill a whole batch at once, use
+   **Edit → Auto-detect Corners on All Images**.
 6. The **preview pane** (right) shows the rectified result live.
 7. **Remove** an unwanted image with `Delete`, the toolbar button, or
    right-click → Remove in the filmstrip (removes it from the project only —
@@ -99,6 +114,7 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
 | Nudge corner      | Arrow keys (hold two for diagonal; `Shift` / `Ctrl+Shift` = larger steps) |
 | Deselect corner   | `Esc`           |
 | Copy corners from previous | `Ctrl+D` |
+| Auto-detect corners | `Ctrl+Shift+D` |
 
 Nudge step sizes, loupe zoom, and equal-width spreads are configurable in
 **Edit → Settings**.

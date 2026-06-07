@@ -5,6 +5,7 @@
 #include "PdfExporter.h"
 #include "Project.h"
 #include "Warp.h"
+#include "PageDetector.h"
 
 #include <QAction>
 #include <QApplication>
@@ -27,6 +28,7 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPainter>
+#include <QProgressDialog>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSlider>
@@ -69,6 +71,32 @@ void rotatePageBy(Page &p, int deltaDegrees)
     p.marked = false;
 }
 
+// Map detected page quads onto a Page per the count rule. Returns the number of
+// pages applied (1 -> 4-point quad, 2 -> 6-point spread), or 0 if detection
+// failed (0 or >2 pages) -- in which case the page is left untouched.
+int applyQuadsToPage(Page &p, const QVector<PageDetector::Quad> &quads)
+{
+    const int n = quads.size();
+    if (n == 1) {
+        const PageDetector::Quad &q = quads[0];
+        p.mode = Page::Four;
+        p.points = { q.tl, q.tr, q.br, q.bl };
+        p.marked = true;
+        return 1;
+    }
+    if (n == 2) {
+        const PageDetector::Quad &l = quads[0]; // left  (sorted by centroid x)
+        const PageDetector::Quad &r = quads[1]; // right
+        const QPointF topSpine = (l.tr + r.tl) / 2.0;
+        const QPointF botSpine = (l.br + r.bl) / 2.0;
+        p.mode = Page::Six;
+        p.points = { l.tl, topSpine, r.tr, r.br, botSpine, l.bl };
+        p.marked = true;
+        return 2;
+    }
+    return 0;
+}
+
 } // namespace
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
@@ -81,6 +109,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     updateTitle();
     syncControlsToCurrent(); // start with no current image -> controls disabled
     updateStatus();
+}
+
+MainWindow::~MainWindow()
+{
+    delete m_detector;
 }
 
 void MainWindow::setupUi()
@@ -211,6 +244,20 @@ void MainWindow::setupActions()
     connect(m_actTakePrev, &QAction::triggered,
             this, &MainWindow::takeOverPreviousPoints);
 
+    m_actAutoDetect = new QAction(tr("&Auto-detect Corners"), this);
+    m_actAutoDetect->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
+    m_actAutoDetect->setToolTip(
+        tr("Detect the page corners automatically (1 page → 4 points, "
+           "2 pages → 6-point spread)"));
+    connect(m_actAutoDetect, &QAction::triggered,
+            this, &MainWindow::autoDetectCorners);
+
+    m_actAutoDetectAll = new QAction(tr("Auto-detect Corners on A&ll Images"), this);
+    m_actAutoDetectAll->setToolTip(
+        tr("Run auto-detect on every image in the project"));
+    connect(m_actAutoDetectAll, &QAction::triggered,
+            this, &MainWindow::autoDetectCornersAll);
+
     m_chkSixPoint = new QCheckBox(tr("Two pages (6 pts)"), this);
     connect(m_chkSixPoint, &QCheckBox::toggled, this, &MainWindow::onModeToggled);
 
@@ -236,6 +283,8 @@ void MainWindow::setupActions()
     editMenu->addAction(m_actMoveDown);
     editMenu->addSeparator();
     editMenu->addAction(m_actTakePrev);
+    editMenu->addAction(m_actAutoDetect);
+    editMenu->addAction(m_actAutoDetectAll);
     editMenu->addSeparator();
     editMenu->addAction(m_actPrev);
     editMenu->addAction(m_actNext);
@@ -249,6 +298,8 @@ void MainWindow::setupActions()
     tb->addAction(m_actRotL);
     tb->addAction(m_actRotR);
     tb->addAction(m_actRemove);
+    tb->addSeparator();
+    tb->addAction(m_actAutoDetect);
     tb->addSeparator();
     tb->addWidget(m_chkSixPoint);
     tb->addWidget(new QLabel(QStringLiteral("  ")));
@@ -503,6 +554,130 @@ void MainWindow::takeOverPreviousPoints()
     updateStatus();
 }
 
+// Auto-detect the page corners on the current image with the YOLO11-seg model.
+// The model expects an upright page, and operates on m_currentRotated -- whose
+// pixel space is exactly Page::points' space, so detections drop straight in.
+//   1 page  -> 4-point quad (Four)
+//   2 pages -> 6-point spread (Six); spine = midpoints of the shared edge
+//   0 or >2 -> reported as a failed detection, corners left untouched
+void MainWindow::autoDetectCorners()
+{
+    if (m_current < 0 || m_currentRotated.isNull())
+        return;
+
+    if (!m_detector)
+        m_detector = new PageDetector(); // lazily loads the ONNX model
+    if (!m_detector->ok()) {
+        statusBar()->showMessage(
+            tr("Auto-detect: page-detection model could not be loaded."), 4000);
+        return;
+    }
+
+    // m_currentRotated -> cv::Mat in RGB order (Format_RGB888 is R,G,B).
+    QImage rgb = m_currentRotated.convertToFormat(QImage::Format_RGB888);
+    cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
+                const_cast<uchar *>(rgb.bits()), rgb.bytesPerLine());
+
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    const QVector<PageDetector::Quad> quads = m_detector->detect(mat);
+    QApplication::restoreOverrideCursor();
+
+    const int applied = applyQuadsToPage(m_pages[m_current], quads);
+    if (applied == 0) {
+        const int n = quads.size();
+        statusBar()->showMessage(
+            n == 0 ? tr("Auto-detect: no page found.")
+                   : tr("Auto-detect: %1 regions found (expected 1 or 2) — "
+                        "please mark this image manually.").arg(n), 5000);
+        return;
+    }
+    m_lastMode = m_pages[m_current].mode;
+
+    setDirty(true);
+    refreshCurrent();
+    syncControlsToCurrent();
+    updateFilmstripItem(m_current);
+    updateStatus();
+    statusBar()->showMessage(
+        applied == 1 ? tr("Auto-detect: 1 page → 4 points.")
+                     : tr("Auto-detect: 2 pages → 6-point spread."), 4000);
+}
+
+// Auto-detect corners on EVERY image in the project. Loads each image, rotates
+// it upright, runs the detector, and applies the same 1->4 / 2->6 / fail rule.
+// Already-marked images are overwritten only where a page is found (subject to a
+// confirmation), so a failed detection never wipes existing corners.
+void MainWindow::autoDetectCornersAll()
+{
+    if (m_pages.isEmpty())
+        return;
+
+    if (!m_detector)
+        m_detector = new PageDetector(); // lazily loads the ONNX model
+    if (!m_detector->ok()) {
+        statusBar()->showMessage(
+            tr("Auto-detect: page-detection model could not be loaded."), 4000);
+        return;
+    }
+
+    int markedCount = 0;
+    for (const Page &p : m_pages)
+        if (p.marked)
+            ++markedCount;
+    if (markedCount > 0) {
+        const auto choice = QMessageBox::warning(
+            this, tr("Auto-detect Corners on All Images"),
+            tr("This replaces the corners on %1 already-marked image(s) where a "
+               "page is detected. Continue?").arg(markedCount),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (choice != QMessageBox::Yes)
+            return;
+    }
+
+    QProgressDialog progress(tr("Auto-detecting page corners…"), tr("Cancel"),
+                             0, m_pages.size(), this);
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(0);
+
+    int four = 0, six = 0, failed = 0;
+    for (int i = 0; i < m_pages.size(); ++i) {
+        progress.setValue(i);
+        if (progress.wasCanceled())
+            break;
+
+        Page &pg = m_pages[i];
+        QImageReader reader(pg.path);
+        reader.setAutoTransform(true); // honour EXIF, like elsewhere
+        const QImage original = reader.read();
+        if (original.isNull()) {
+            ++failed;
+            continue;
+        }
+        const QImage rotated = Warp::applyRotation(original, pg.rotation);
+        QImage rgb = rotated.convertToFormat(QImage::Format_RGB888);
+        cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
+                    const_cast<uchar *>(rgb.bits()), rgb.bytesPerLine());
+
+        const int applied = applyQuadsToPage(pg, m_detector->detect(mat));
+        if (applied == 1) ++four;
+        else if (applied == 2) ++six;
+        else ++failed;
+        if (applied > 0)
+            updateFilmstripItem(i);
+    }
+    progress.setValue(m_pages.size());
+
+    if (four + six > 0) {
+        setDirty(true);
+        refreshCurrent(); // re-render the currently shown image with its new corners
+        syncControlsToCurrent();
+        updateStatus();
+    }
+    statusBar()->showMessage(
+        tr("Auto-detect: %1 marked (%2 single, %3 spread), %4 left to mark manually.")
+            .arg(four + six).arg(four).arg(six).arg(failed), 8000);
+}
+
 // ---- Selection / current image ---------------------------------------------
 
 void MainWindow::selectIndex(int i)
@@ -596,6 +771,8 @@ void MainWindow::syncControlsToCurrent()
     m_actMoveUp->setEnabled(has && m_current > 0);
     m_actMoveDown->setEnabled(has && m_current < m_pages.size() - 1);
     m_actTakePrev->setEnabled(has && m_current > 0 && m_pages[m_current - 1].marked);
+    m_actAutoDetect->setEnabled(has);
+    m_actAutoDetectAll->setEnabled(!m_pages.isEmpty());
     m_chkSixPoint->setEnabled(has);
 
     if (!has) {

@@ -13,11 +13,13 @@ class QAction;
 class QCheckBox;
 class QLabel;
 class QMenu;
+class PageDetector;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+    ~MainWindow() override;
 
     // Add image files passed on the command line (e.g. via the .desktop %F).
     void addPaths(const QStringList &paths);
@@ -41,6 +43,8 @@ private slots:
     void moveCurrentImageUp();
     void moveCurrentImageDown();
     void takeOverPreviousPoints();
+    void autoDetectCorners();
+    void autoDetectCornersAll();
     void onPointsChanged();
     void rotateLeft();
     void rotateRight();
@@ -124,4 +128,8 @@ private:
     QAction *m_actMoveUp = nullptr;
     QAction *m_actMoveDown = nullptr;
     QAction *m_actTakePrev = nullptr;
+    QAction *m_actAutoDetect = nullptr;
+    QAction *m_actAutoDetectAll = nullptr;
+
+    PageDetector *m_detector = nullptr; // lazily created on first auto-detect
 };

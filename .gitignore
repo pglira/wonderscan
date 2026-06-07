@@ -1,6 +1,10 @@
 # Build output
 /build/
 
+# Trained page-detection model: distributed via GitHub Releases, not committed
+# (it is AGPL-3.0, unlike the MIT app code). See models/README.md.
+/models/*.onnx
+
 # Claude Code tooling (not part of the app)
 /.claude/
 
