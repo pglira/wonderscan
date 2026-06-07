@@ -118,8 +118,8 @@ private:
     // Controls / actions
     QCheckBox *m_chkSixPoint = nullptr;
     QCheckBox *m_chkSplit = nullptr;
+    QCheckBox *m_chkGrayscale = nullptr;
     QSpinBox *m_insetSpin = nullptr;
-    QAction *m_actGrayscale = nullptr;
     QAction *m_actPrev = nullptr;
     QAction *m_actNext = nullptr;
     QAction *m_actRotL = nullptr;

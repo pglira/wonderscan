@@ -295,6 +295,15 @@ void MainWindow::setupActions()
     m_chkSplit->setChecked(false);
     connect(m_chkSplit, &QCheckBox::toggled, this, &MainWindow::onSplitToggled);
 
+    m_chkGrayscale = new QCheckBox(tr("Grayscale"), this);
+    m_chkGrayscale->setToolTip(
+        tr("Show the source image and thumbnails in grayscale (shortcut: G); "
+           "the live preview stays in colour"));
+    connect(m_chkGrayscale, &QCheckBox::toggled, this, &MainWindow::onGrayscaleToggled);
+    // 'G' toggles it from anywhere (the checkbox is the state's single home).
+    connect(new QShortcut(QKeySequence(Qt::Key_G), this), &QShortcut::activated,
+            this, [this] { m_chkGrayscale->toggle(); });
+
     m_insetSpin = new QSpinBox(this);
     m_insetSpin->setRange(0, 2000);
     m_insetSpin->setSuffix(tr(" px"));
@@ -312,14 +321,6 @@ void MainWindow::setupActions()
     m_actNext->setShortcut(QKeySequence(Qt::Key_N));
     connect(m_actNext, &QAction::triggered, this, &MainWindow::goNext);
 
-    m_actGrayscale = new QAction(tr("&Grayscale view"), this);
-    m_actGrayscale->setCheckable(true);
-    m_actGrayscale->setShortcut(QKeySequence(Qt::Key_G));
-    m_actGrayscale->setToolTip(
-        tr("Show the source image and thumbnails in grayscale "
-           "(the live preview stays in colour)"));
-    connect(m_actGrayscale, &QAction::toggled, this, &MainWindow::onGrayscaleToggled);
-
     editMenu->addAction(m_actRotL);
     editMenu->addAction(m_actRotR);
     editMenu->addAction(m_actRotAllL);
@@ -335,8 +336,6 @@ void MainWindow::setupActions()
     editMenu->addSeparator();
     editMenu->addAction(m_actPrev);
     editMenu->addAction(m_actNext);
-    editMenu->addSeparator();
-    editMenu->addAction(m_actGrayscale);
 
     auto *actSettings = new QAction(tr("&Settings..."), this);
     actSettings->setShortcut(QKeySequence::Preferences);
@@ -357,7 +356,7 @@ void MainWindow::setupActions()
     tb->addWidget(new QLabel(tr("Inset:")));
     tb->addWidget(m_insetSpin);
     tb->addSeparator();
-    tb->addAction(m_actGrayscale);
+    tb->addWidget(m_chkGrayscale);
     tb->addSeparator();
     tb->addAction(m_actPrev);
     tb->addAction(m_actNext);
