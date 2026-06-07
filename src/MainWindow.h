@@ -56,6 +56,7 @@ private slots:
     void rotateAllRight();
     void onModeToggled(bool six);
     void onSplitToggled(bool split);
+    void onGrayscaleToggled(bool on);
     void onInsetChanged(int px);
     void goPrev();
     void goNext();
@@ -93,6 +94,7 @@ private:
     int m_current = -1;                  // selected page index (view state), or -1
     Page::Mode m_lastMode = Page::Four;  // sticky defaults applied to new pages
     bool m_lastSplit = false;
+    bool m_grayscale = false;            // view aid: gray the canvas + thumbnails
 
     // Persisted preferences (see AppSettings); cached here because some are read
     // on the preview hot path. lastDir and the recent list live in AppSettings
@@ -117,6 +119,7 @@ private:
     QCheckBox *m_chkSixPoint = nullptr;
     QCheckBox *m_chkSplit = nullptr;
     QSpinBox *m_insetSpin = nullptr;
+    QAction *m_actGrayscale = nullptr;
     QAction *m_actPrev = nullptr;
     QAction *m_actNext = nullptr;
     QAction *m_actRotL = nullptr;

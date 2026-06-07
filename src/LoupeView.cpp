@@ -85,7 +85,31 @@ void LoupeView::resizeEvent(QResizeEvent *e)
 void LoupeView::setImage(const QImage &image)
 {
     m_image = image;
+    rebuildGray();
     update();
+}
+
+void LoupeView::setGrayscale(bool on)
+{
+    if (m_grayscale == on)
+        return;
+    m_grayscale = on;
+    rebuildGray();
+    update();
+}
+
+// Cache a desaturated copy so the frequent loupe repaints during a drag don't
+// reconvert the full-res source each time. Dropped when grayscale is off.
+void LoupeView::rebuildGray()
+{
+    m_grayImage = (m_grayscale && !m_image.isNull())
+                      ? m_image.convertToFormat(QImage::Format_Grayscale8)
+                      : QImage();
+}
+
+const QImage &LoupeView::shownImage() const
+{
+    return (m_grayscale && !m_grayImage.isNull()) ? m_grayImage : m_image;
 }
 
 void LoupeView::setPage(const Page *page)
@@ -169,7 +193,7 @@ void LoupeView::paintEvent(QPaintEvent *)
     // window runs off the bitmap; the uncovered part stays the black fill above.
     const double srcD = side / m_zoom;
     QRectF srcRect(m_center.x() - srcD / 2.0, m_center.y() - srcD / 2.0, srcD, srcD);
-    p.drawImage(view, m_image, srcRect);
+    p.drawImage(view, shownImage(), srcRect);
 
     // The same boundary lines the canvas draws, magnified to match.
     drawOutline(p, view, srcD);

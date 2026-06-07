@@ -47,6 +47,7 @@ void ImageCanvas::setImage(const QImage &rotated, Page *page)
     m_page = page;
     m_dragging = false;
     m_activeIndex = (page && page->hasPoints()) ? 0 : -1; // auto-select corner 1
+    rebuildGray();
     emitLoupeTarget();
     update();
 }
@@ -54,6 +55,7 @@ void ImageCanvas::setImage(const QImage &rotated, Page *page)
 void ImageCanvas::clear()
 {
     m_image = QImage();
+    m_grayImage = QImage();
     m_page = nullptr;
     m_activeIndex = -1;
     m_dragging = false;
@@ -93,6 +95,29 @@ void ImageCanvas::setExportInset(int px)
 {
     m_exportInset = std::max(0, px);
     update();
+}
+
+void ImageCanvas::setGrayscale(bool on)
+{
+    if (m_grayscale == on)
+        return;
+    m_grayscale = on;
+    rebuildGray(); // toggling leaves m_activeIndex/m_dragging untouched
+    update();
+}
+
+// Keep a desaturated copy of the source ready so paints during a drag don't have
+// to reconvert the full-res image each frame. Dropped when grayscale is off.
+void ImageCanvas::rebuildGray()
+{
+    m_grayImage = (m_grayscale && !m_image.isNull())
+                      ? m_image.convertToFormat(QImage::Format_Grayscale8)
+                      : QImage();
+}
+
+const QImage &ImageCanvas::shownImage() const
+{
+    return (m_grayscale && !m_grayImage.isNull()) ? m_grayImage : m_image;
 }
 
 QRectF ImageCanvas::displayRect() const
@@ -191,7 +216,7 @@ void ImageCanvas::paintEvent(QPaintEvent *)
     }
 
     const QRectF dr = displayRect();
-    p.drawImage(dr, m_image);
+    p.drawImage(dr, shownImage());
 
     if (m_page && m_page->hasPoints()) {
         // Quad outline(s).

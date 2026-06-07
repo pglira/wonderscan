@@ -312,6 +312,14 @@ void MainWindow::setupActions()
     m_actNext->setShortcut(QKeySequence(Qt::Key_N));
     connect(m_actNext, &QAction::triggered, this, &MainWindow::goNext);
 
+    m_actGrayscale = new QAction(tr("&Grayscale view"), this);
+    m_actGrayscale->setCheckable(true);
+    m_actGrayscale->setShortcut(QKeySequence(Qt::Key_G));
+    m_actGrayscale->setToolTip(
+        tr("Show the source image and thumbnails in grayscale "
+           "(the live preview stays in colour)"));
+    connect(m_actGrayscale, &QAction::toggled, this, &MainWindow::onGrayscaleToggled);
+
     editMenu->addAction(m_actRotL);
     editMenu->addAction(m_actRotR);
     editMenu->addAction(m_actRotAllL);
@@ -327,6 +335,8 @@ void MainWindow::setupActions()
     editMenu->addSeparator();
     editMenu->addAction(m_actPrev);
     editMenu->addAction(m_actNext);
+    editMenu->addSeparator();
+    editMenu->addAction(m_actGrayscale);
 
     auto *actSettings = new QAction(tr("&Settings..."), this);
     actSettings->setShortcut(QKeySequence::Preferences);
@@ -346,6 +356,8 @@ void MainWindow::setupActions()
     tb->addSeparator();
     tb->addWidget(new QLabel(tr("Inset:")));
     tb->addWidget(m_insetSpin);
+    tb->addSeparator();
+    tb->addAction(m_actGrayscale);
     tb->addSeparator();
     tb->addAction(m_actPrev);
     tb->addAction(m_actNext);
@@ -424,8 +436,13 @@ void MainWindow::updateFilmstripItem(int i)
         return;
     const QImage base = m_doc.thumb(i);
     QImage rot = Warp::applyRotation(base, m_doc.page(i).rotation);
-    QPixmap pm = QPixmap::fromImage(
-        rot.scaled(kThumbW, kThumbH, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    QImage scaled =
+        rot.scaled(kThumbW, kThumbH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    // Desaturate the page image when the grayscale view is on; the marked badge
+    // below is painted afterwards so it stays a coloured status indicator.
+    if (m_grayscale)
+        scaled = scaled.convertToFormat(QImage::Format_Grayscale8);
+    QPixmap pm = QPixmap::fromImage(scaled);
 
     if (m_doc.page(i).marked) {
         QPainter p(&pm);
@@ -926,6 +943,22 @@ void MainWindow::onSplitToggled(bool split)
     m_lastSplit = split;
     setDirty(true);
     updatePreview();
+}
+
+// Toggle the grayscale view aid (shortcut G). The canvas + loupe gray their
+// source on the spot — corner selection and any in-progress drag are kept — and
+// every thumbnail is repainted. The live preview is intentionally left in colour,
+// and nothing here touches the document (this is a view state, not a save).
+void MainWindow::onGrayscaleToggled(bool on)
+{
+    m_grayscale = on;
+    m_canvas->setGrayscale(on);
+    m_loupe->setGrayscale(on);
+    for (int i = 0; i < m_doc.pageCount(); ++i)
+        updateFilmstripItem(i);
+    statusBar()->showMessage(
+        on ? tr("Grayscale view on (preview stays in colour).")
+           : tr("Grayscale view off."), 2500);
 }
 
 // Project-level export inset changed from the toolbar: store it, mirror it onto

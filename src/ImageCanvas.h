@@ -28,6 +28,11 @@ public:
     // be exported is drawn over the marked quad. Purely a visual overlay.
     void setExportInset(int px);
 
+    // Render the source in grayscale (the marking overlays stay coloured). A view
+    // aid only — the page data and coordinate space are unchanged, and the corner
+    // selection/drag is left intact so it can be toggled at any time.
+    void setGrayscale(bool on);
+
 signals:
     void pointsChanged(); // a handle was moved (page->marked is set true)
 
@@ -58,8 +63,12 @@ private:
     void drawQuad(QPainter &p, const QVector<int> &idx) const;
     void drawInsetOverlay(QPainter &p) const; // dashed inner boundary (export inset)
     void emitLoupeTarget(); // notify listeners of the current active-point state
+    void rebuildGray();     // refresh the cached grayscale copy of m_image
+    const QImage &shownImage() const; // m_image, or its grayscale copy when on
 
     QImage m_image;
+    QImage m_grayImage;      // cached grayscale copy of m_image (only when on)
+    bool m_grayscale = false; // render the source desaturated
     Page *m_page = nullptr;
     int m_activeIndex = -1;  // selected/highlighted point (mouse or keyboard), or -1
     bool m_dragging = false; // left button is currently dragging m_activeIndex

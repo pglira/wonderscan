@@ -22,6 +22,7 @@ public:
     void setImage(const QImage &image); // the rotated source the loupe reads from
     void setPage(const Page *page);     // page whose lines to overlay (or nullptr)
     void setExportInset(int px);        // inward export offset to overlay (px)
+    void setGrayscale(bool on);         // magnify the source desaturated (overlays stay coloured)
     void setZoom(double zoom);          // also moves the slider to match
     void stepZoom(int direction);       // nudge magnification: +1 in, -1 out (+/- keys)
     void showPoint(const QPointF &imagePoint); // centre on this image-space point
@@ -39,8 +40,12 @@ protected:
 private:
     void drawOutline(QPainter &p, const QRectF &view, double srcD) const;
     int sliderStrip() const; // height reserved at the bottom for the zoom slider
+    void rebuildGray();      // refresh the cached grayscale copy of m_image
+    const QImage &shownImage() const; // m_image, or its grayscale copy when on
 
     QImage m_image;        // same rotated image the canvas shows
+    QImage m_grayImage;    // cached grayscale copy of m_image (only when on)
+    bool m_grayscale = false; // magnify the source desaturated
     const Page *m_page = nullptr; // page geometry to overlay (owned elsewhere)
     int m_inset = 0;       // export inset to overlay (px), 0 = none
     QPointF m_center;      // image-space point under the crosshair
