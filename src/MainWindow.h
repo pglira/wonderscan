@@ -10,6 +10,7 @@
 
 class ImageCanvas;
 class PreviewPane;
+class LoupeView;
 class QListWidget;
 class QAction;
 class QCheckBox;
@@ -105,6 +106,7 @@ private:
     QListWidget *m_filmstrip = nullptr;
     ImageCanvas *m_canvas = nullptr;
     PreviewPane *m_preview = nullptr;
+    LoupeView *m_loupe = nullptr;
     QMenu *m_recentMenu = nullptr;
     QLabel *m_statusLabel = nullptr;
 

@@ -4,6 +4,7 @@
 #include "Document.h"
 #include "ImageCanvas.h"
 #include "ImageConv.h"
+#include "LoupeView.h"
 #include "PreviewPane.h"
 #include "PdfExporter.h"
 #include "Warp.h"
@@ -37,6 +38,7 @@
 #include <QSplitter>
 #include <QStatusBar>
 #include <QToolBar>
+#include <QVBoxLayout>
 #include <cmath>
 
 namespace {
@@ -101,7 +103,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     setupActions();
     loadSettings();
     setAcceptDrops(true);
-    resize(1400, 900);
+    resize(1400, 900); // restore size; the window opens maximized (see main.cpp)
     updateTitle();
     syncControlsToCurrent(); // start with no current image -> controls disabled
     updateStatus();
@@ -144,12 +146,29 @@ void MainWindow::setupUi()
     connect(m_canvas, &ImageCanvas::pointsChanged,
             this, &MainWindow::onPointsChanged);
 
+    m_loupe = new LoupeView(this);
+    connect(m_canvas, &ImageCanvas::loupeTargetChanged, this,
+            [this](const QPointF &pt, bool active) {
+                if (active)
+                    m_loupe->showPoint(pt);
+                else
+                    m_loupe->clear();
+            });
+
     m_preview = new PreviewPane(this);
+
+    // Right column: a fixed loupe stacked above the live preview.
+    auto *rightCol = new QWidget(this);
+    auto *rightLayout = new QVBoxLayout(rightCol);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
+    rightLayout->setSpacing(4);
+    rightLayout->addWidget(m_loupe);
+    rightLayout->addWidget(m_preview, 1);
 
     auto *splitter = new QSplitter(Qt::Horizontal, this);
     splitter->addWidget(m_filmstrip);
     splitter->addWidget(m_canvas);
-    splitter->addWidget(m_preview);
+    splitter->addWidget(rightCol);
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
     splitter->setStretchFactor(2, 0);
@@ -652,6 +671,7 @@ void MainWindow::selectIndex(int i)
         m_current = -1;
         m_canvas->clear();
         m_preview->clear();
+        m_loupe->clear();
         syncControlsToCurrent();
         updateStatus();
         return;
@@ -683,6 +703,7 @@ void MainWindow::refreshCurrent()
     if (m_currentOriginal.isNull()) {
         m_canvas->clear();
         m_preview->clear();
+        m_loupe->clear();
         return;
     }
 
@@ -703,6 +724,9 @@ void MainWindow::refreshCurrent()
         m_currentProxy = m_currentRotated;
     }
 
+    // Give the loupe the image first: the next line emits loupeTargetChanged,
+    // which makes the loupe paint using that image.
+    m_loupe->setImage(m_currentRotated);
     m_canvas->setImage(m_currentRotated, &pg);
     updatePreview();
 }
@@ -968,11 +992,11 @@ bool MainWindow::saveProjectAs()
 
 // ---- Settings / recent projects --------------------------------------------
 
-// Push the current nudge/loupe preferences into the canvas.
+// Push the current nudge/loupe preferences into the canvas and loupe.
 void MainWindow::applyEditorSettings()
 {
     m_canvas->setNudgeSteps(m_prefs.nudgeFine, m_prefs.nudgeCoarse, m_prefs.nudgeLarge);
-    m_canvas->setLoupeZoom(m_prefs.loupeZoom);
+    m_loupe->setZoom(m_prefs.loupeZoom);
 }
 
 void MainWindow::loadSettings()

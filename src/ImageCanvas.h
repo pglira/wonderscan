@@ -18,17 +18,19 @@ public:
     void clear();
 
     // Select the corner point at `index` (0-based) for keyboard editing, which
-    // highlights it and shows the loupe. Returns false if no such point exists.
+    // highlights it and drives the loupe. Returns false if no such point exists.
     bool selectPoint(int index);
-
-    void setLoupeZoom(double zoom);
-    double loupeZoom() const { return m_loupeZoom; }
 
     // Arrow-key nudge distances (image px): plain / +Shift / +Ctrl+Shift.
     void setNudgeSteps(double fine, double coarse, double large);
 
 signals:
     void pointsChanged(); // a handle was moved (page->marked is set true)
+
+    // The selected/highlighted corner changed: `active` true with `imagePoint`
+    // in image-space when one is selected, false (point ignored) when none is.
+    // Drives the external LoupeView so the magnifier follows the active corner.
+    void loupeTargetChanged(const QPointF &imagePoint, bool active);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -50,13 +52,12 @@ private:
     void moveActivePoint(const QPointF &imagePt); // clamp, store, mark, emit, repaint
     void nudgeByHeldArrows(Qt::KeyboardModifiers mods); // combined-direction nudge
     void drawQuad(QPainter &p, const QVector<int> &idx) const;
-    void drawLoupe(QPainter &p) const;
+    void emitLoupeTarget(); // notify listeners of the current active-point state
 
     QImage m_image;
     Page *m_page = nullptr;
     int m_activeIndex = -1;  // selected/highlighted point (mouse or keyboard), or -1
     bool m_dragging = false; // left button is currently dragging m_activeIndex
-    double m_loupeZoom = 2.0;
     double m_nudgeFine = 1.0;    // arrow-key step (image px)
     double m_nudgeCoarse = 10.0; // ... with Shift
     double m_nudgeLarge = 25.0;  // ... with Ctrl+Shift

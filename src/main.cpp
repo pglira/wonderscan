@@ -325,6 +325,6 @@ int main(int argc, char *argv[])
     if (!files.isEmpty())
         w.addPaths(files);
 
-    w.show();
+    w.showMaximized();
     return app.exec();
 }

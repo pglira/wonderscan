@@ -28,6 +28,7 @@ qt_add_executable(wonderscan
   src/Document.cpp
   src/ImageCanvas.cpp
   src/PreviewPane.cpp
+  src/LoupeView.cpp
   src/PageDetector.cpp
   src/MainWindow.cpp
   resources.qrc

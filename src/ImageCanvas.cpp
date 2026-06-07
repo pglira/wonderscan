@@ -5,15 +5,12 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
-#include <QPainterPath>
 #include <algorithm>
 #include <cmath>
 
 namespace {
 constexpr double kHandleRadius = 7.0;
 constexpr double kHitRadius = 16.0;
-constexpr int kLoupeDiameter = 160;
-constexpr int kLoupeMargin = 12;
 } // namespace
 
 ImageCanvas::ImageCanvas(QWidget *parent) : QWidget(parent)
@@ -33,6 +30,7 @@ void ImageCanvas::setImage(const QImage &rotated, Page *page)
     m_page = page;
     m_dragging = false;
     m_activeIndex = (page && page->hasPoints()) ? 0 : -1; // auto-select corner 1
+    emitLoupeTarget();
     update();
 }
 
@@ -42,6 +40,9 @@ void ImageCanvas::clear()
     m_page = nullptr;
     m_activeIndex = -1;
     m_dragging = false;
+    // No loupe signal here: tearing down the view is the owner's job (MainWindow
+    // clears the loupe alongside the canvas). The signal only reports the active
+    // corner changing while an image is loaded.
     update();
 }
 
@@ -50,14 +51,18 @@ bool ImageCanvas::selectPoint(int index)
     if (!m_page || index < 0 || index >= m_page->points.size())
         return false;
     m_activeIndex = index;
+    emitLoupeTarget();
     update();
     return true;
 }
 
-void ImageCanvas::setLoupeZoom(double zoom)
+// Tell the LoupeView which corner (if any) is active so the magnifier tracks it.
+void ImageCanvas::emitLoupeTarget()
 {
-    m_loupeZoom = std::clamp(zoom, 1.5, 12.0);
-    update();
+    if (m_page && m_activeIndex >= 0 && m_activeIndex < m_page->points.size())
+        emit loupeTargetChanged(m_page->points[m_activeIndex], true);
+    else
+        emit loupeTargetChanged(QPointF(), false);
 }
 
 void ImageCanvas::setNudgeSteps(double fine, double coarse, double large)
@@ -181,59 +186,7 @@ void ImageCanvas::paintEvent(QPaintEvent *)
                        Qt::AlignCenter, QString::number(i + 1));
         }
         p.restore();
-
-        if (m_activeIndex >= 0)
-            drawLoupe(p);
     }
-}
-
-void ImageCanvas::drawLoupe(QPainter &p) const
-{
-    if (m_activeIndex < 0 || !m_page)
-        return;
-
-    const QPointF ip = m_page->points[m_activeIndex]; // image coords
-    const double srcD = kLoupeDiameter / m_loupeZoom;
-    QRectF srcRect(ip.x() - srcD / 2.0, ip.y() - srcD / 2.0, srcD, srcD);
-
-    // Keep the loupe clear of the handle being dragged: place it on the same
-    // horizontal side as the handle but the opposite vertical side (e.g. drag
-    // the top-left corner -> loupe shows in the bottom-left).
-    const QPointF handleW = imageToWidget(ip);
-    const bool handleLeft = handleW.x() < width() / 2.0;
-    const bool handleTop = handleW.y() < height() / 2.0;
-    const double lx = handleLeft ? kLoupeMargin
-                                 : width() - kLoupeDiameter - kLoupeMargin;
-    const double ly = handleTop ? height() - kLoupeDiameter - kLoupeMargin
-                                : kLoupeMargin;
-    QRectF loupeRect(lx, ly, kLoupeDiameter, kLoupeDiameter);
-
-    QPainterPath clip;
-    clip.addEllipse(loupeRect);
-    p.save();
-    p.setClipPath(clip);
-    p.fillRect(loupeRect, QColor(0, 0, 0));
-    p.drawImage(loupeRect, m_image, srcRect);
-    p.restore();
-
-    // Crosshair at the loupe centre + border.
-    p.setPen(QPen(QColor(255, 80, 80), 1.2));
-    const QPointF c = loupeRect.center();
-    p.drawLine(QPointF(c.x() - 10, c.y()), QPointF(c.x() + 10, c.y()));
-    p.drawLine(QPointF(c.x(), c.y() - 10), QPointF(c.x(), c.y() + 10));
-    p.setPen(QPen(QColor(240, 240, 240), 2));
-    p.setBrush(Qt::NoBrush);
-    p.drawEllipse(loupeRect);
-
-    p.setPen(QColor(230, 230, 230));
-    const bool labelBelow = loupeRect.bottom() + 20 <= height();
-    const QRectF labelRect =
-        labelBelow ? QRectF(loupeRect.left(), loupeRect.bottom() + 2,
-                            loupeRect.width(), 16)
-                   : QRectF(loupeRect.left(), loupeRect.top() - 18,
-                            loupeRect.width(), 16);
-    p.drawText(labelRect, Qt::AlignHCenter | Qt::AlignVCenter,
-               QString::number(m_loupeZoom, 'g', 2) + QStringLiteral("x"));
 }
 
 QPointF ImageCanvas::clampToImage(const QPointF &imagePt) const
@@ -249,6 +202,7 @@ void ImageCanvas::moveActivePoint(const QPointF &imagePt)
     m_page->points[m_activeIndex] = clampToImage(imagePt);
     m_page->marked = true;
     emit pointsChanged();
+    emitLoupeTarget(); // loupe follows the corner as it moves
     update();
 }
 
@@ -259,6 +213,7 @@ void ImageCanvas::mousePressEvent(QMouseEvent *e)
         if (hit >= 0) {
             m_activeIndex = hit; // also becomes the keyboard selection
             m_dragging = true;
+            emitLoupeTarget();
         }
         update();
     }
@@ -291,6 +246,7 @@ void ImageCanvas::keyPressEvent(QKeyEvent *e)
         // Esc clears the selection (and hides the loupe).
         if (e->key() == Qt::Key_Escape && m_activeIndex >= 0) {
             m_activeIndex = -1;
+            emitLoupeTarget();
             update();
             e->accept();
             return;
