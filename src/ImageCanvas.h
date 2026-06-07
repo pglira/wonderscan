@@ -2,6 +2,7 @@
 
 #include <QWidget>
 #include <QImage>
+#include <QSet>
 
 struct Page;
 
@@ -35,6 +36,8 @@ protected:
     void mouseMoveEvent(QMouseEvent *) override;
     void mouseReleaseEvent(QMouseEvent *) override;
     void keyPressEvent(QKeyEvent *) override;
+    void keyReleaseEvent(QKeyEvent *) override;
+    void focusOutEvent(QFocusEvent *) override;
     bool focusNextPrevChild(bool next) override; // Tab / Shift+Tab cycle corners
 
 private:
@@ -45,6 +48,7 @@ private:
     int handleAt(const QPointF &widgetPos) const;
     QPointF clampToImage(const QPointF &imagePt) const;
     void moveActivePoint(const QPointF &imagePt); // clamp, store, mark, emit, repaint
+    void nudgeByHeldArrows(Qt::KeyboardModifiers mods); // combined-direction nudge
     void drawQuad(QPainter &p, const QVector<int> &idx) const;
     void drawLoupe(QPainter &p) const;
 
@@ -56,4 +60,5 @@ private:
     double m_nudgeFine = 1.0;    // arrow-key step (image px)
     double m_nudgeCoarse = 10.0; // ... with Shift
     double m_nudgeLarge = 25.0;  // ... with Ctrl+Shift
+    QSet<int> m_heldArrows;      // arrow keys currently held (for diagonal nudging)
 };

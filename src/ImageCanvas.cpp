@@ -296,29 +296,69 @@ void ImageCanvas::keyPressEvent(QKeyEvent *e)
             return;
         }
 
-        // Arrow keys nudge the selected point; Shift = coarse, Ctrl+Shift = large.
+        // Arrow keys nudge the selected point. Holding two at once (e.g. Up+Left)
+        // moves diagonally; Shift / Ctrl+Shift give larger steps.
         if (m_activeIndex >= 0 && m_activeIndex < m_page->points.size()) {
-            const Qt::KeyboardModifiers mods = e->modifiers();
-            const double step =
-                (mods & Qt::ShiftModifier) && (mods & Qt::ControlModifier) ? m_nudgeLarge
-                : (mods & Qt::ShiftModifier)                               ? m_nudgeCoarse
-                                                                           : m_nudgeFine;
-            double dx = 0.0, dy = 0.0;
             switch (e->key()) {
-            case Qt::Key_Left:  dx = -step; break;
-            case Qt::Key_Right: dx =  step; break;
-            case Qt::Key_Up:    dy = -step; break;
-            case Qt::Key_Down:  dy =  step; break;
-            default: break;
-            }
-            if (dx != 0.0 || dy != 0.0) {
-                moveActivePoint(m_page->points[m_activeIndex] + QPointF(dx, dy));
+            case Qt::Key_Left:
+            case Qt::Key_Right:
+            case Qt::Key_Up:
+            case Qt::Key_Down:
+                m_heldArrows.insert(e->key());
+                nudgeByHeldArrows(e->modifiers());
                 e->accept();
                 return;
+            default:
+                break;
             }
         }
     }
     QWidget::keyPressEvent(e);
+}
+
+// Move the active point by the combined direction of all currently-held arrow
+// keys, so pressing e.g. Up+Left together nudges diagonally.
+void ImageCanvas::nudgeByHeldArrows(Qt::KeyboardModifiers mods)
+{
+    if (!m_page || m_activeIndex < 0 || m_activeIndex >= m_page->points.size())
+        return;
+    double dx = 0.0, dy = 0.0;
+    if (m_heldArrows.contains(Qt::Key_Left))  dx -= 1.0;
+    if (m_heldArrows.contains(Qt::Key_Right)) dx += 1.0;
+    if (m_heldArrows.contains(Qt::Key_Up))    dy -= 1.0;
+    if (m_heldArrows.contains(Qt::Key_Down))  dy += 1.0;
+    if (dx == 0.0 && dy == 0.0)
+        return;
+    const double step =
+        (mods & Qt::ShiftModifier) && (mods & Qt::ControlModifier) ? m_nudgeLarge
+        : (mods & Qt::ShiftModifier)                               ? m_nudgeCoarse
+                                                                   : m_nudgeFine;
+    moveActivePoint(m_page->points[m_activeIndex] + QPointF(dx * step, dy * step));
+}
+
+void ImageCanvas::keyReleaseEvent(QKeyEvent *e)
+{
+    // Ignore the synthetic release that precedes an auto-repeat (the key is
+    // still held); only a genuine release stops tracking that arrow.
+    if (!e->isAutoRepeat()) {
+        switch (e->key()) {
+        case Qt::Key_Left:
+        case Qt::Key_Right:
+        case Qt::Key_Up:
+        case Qt::Key_Down:
+            m_heldArrows.remove(e->key());
+            break;
+        default:
+            break;
+        }
+    }
+    QWidget::keyReleaseEvent(e);
+}
+
+void ImageCanvas::focusOutEvent(QFocusEvent *e)
+{
+    m_heldArrows.clear(); // don't let a key stay "held" if released off-widget
+    QWidget::focusOutEvent(e);
 }
 
 // Repurpose Tab / Shift+Tab to step the selection through the corner points

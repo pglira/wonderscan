@@ -62,8 +62,9 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
    toggle **Split spread** (two pages) vs. stitched (one page).
 5. Drag the **corner handles** onto the page edges, or select one by its number
    (`1`–`4`, or `1`–`6` for a spread — each handle is labelled; `Tab` /
-   `Shift+Tab` step through them) and nudge it with the **arrow keys** (`Shift`
-   and `Ctrl+Shift` give larger steps; `Esc` to deselect). The **loupe** helps
+   `Shift+Tab` step through them) and nudge it with the **arrow keys** (hold two,
+   e.g. Up+Left, to move diagonally; `Shift` and `Ctrl+Shift` give larger steps;
+   `Esc` to deselect). The **loupe** helps
    you place them precisely. Nudge step sizes and the loupe zoom are set in
    **Edit → Settings** (and remembered between sessions).
 6. The **preview pane** (right) shows the rectified result live.
@@ -89,7 +90,7 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
 | Previous / next   | `p` / `n`       |
 | Select corner     | `1`–`6`         |
 | Cycle corners     | `Tab` / `Shift+Tab` |
-| Nudge corner      | Arrow keys (`Shift` / `Ctrl+Shift` = larger steps) |
+| Nudge corner      | Arrow keys (hold two for diagonal; `Shift` / `Ctrl+Shift` = larger steps) |
 | Deselect corner   | `Esc`           |
 
 Nudge step sizes and loupe zoom are configurable in **Edit → Settings**.
