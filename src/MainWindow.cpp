@@ -18,7 +18,6 @@
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QDirIterator>
-#include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
@@ -32,6 +31,7 @@
 #include <QMimeData>
 #include <QPainter>
 #include <QProgressDialog>
+#include <QShortcut>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
@@ -155,10 +155,24 @@ void MainWindow::setupUi()
                 else
                     m_loupe->clear();
             });
+    // The loupe's own slider sets the magnification; remember the chosen value.
+    connect(m_loupe, &LoupeView::zoomChanged, this, [this](double z) {
+        m_prefs.loupeZoom = z;
+        AppSettings::saveEditorPrefs(m_prefs);
+    });
+    // +/- adjust the loupe magnification from anywhere in the window. Bind both
+    // '+' and '=' (the same physical key, with/without Shift) for zooming in.
+    for (const auto key : {Qt::Key_Plus, Qt::Key_Equal}) {
+        connect(new QShortcut(QKeySequence(key), this), &QShortcut::activated, this,
+                [this] { m_loupe->stepZoom(+1); });
+    }
+    connect(new QShortcut(QKeySequence(Qt::Key_Minus), this), &QShortcut::activated,
+            this, [this] { m_loupe->stepZoom(-1); });
 
     m_preview = new PreviewPane(this);
 
-    // Right column: a fixed loupe stacked above the live preview.
+    // Right column: a square loupe on top (its height tracks its width, see
+    // LoupeView) with the live preview filling the rest of the column.
     auto *rightCol = new QWidget(this);
     auto *rightLayout = new QVBoxLayout(rightCol);
     rightLayout->setContentsMargins(0, 0, 0, 0);
@@ -173,7 +187,7 @@ void MainWindow::setupUi()
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
     splitter->setStretchFactor(2, 0);
-    splitter->setSizes({130, 900, 320});
+    splitter->setSizes({130, 760, 480}); // wider preview/loupe panel on the right
     setCentralWidget(splitter);
 
     m_statusLabel = new QLabel(this);
@@ -1119,12 +1133,7 @@ void MainWindow::openSettingsDialog()
     form->addRow(tr("Nudge (Shift):"), coarse);
     form->addRow(tr("Nudge (Ctrl+Shift):"), large);
 
-    auto *loupe = new QDoubleSpinBox(&dlg);
-    loupe->setRange(1.5, 12.0);
-    loupe->setSingleStep(0.5);
-    loupe->setSuffix(QStringLiteral("x"));
-    loupe->setValue(m_prefs.loupeZoom);
-    form->addRow(tr("Loupe zoom:"), loupe);
+    // Loupe magnification is set by the slider on the loupe itself, not here.
 
     auto *equalWidths =
         new QCheckBox(tr("Equal page widths in two-page spreads"), &dlg);
@@ -1143,7 +1152,6 @@ void MainWindow::openSettingsDialog()
     m_prefs.nudgeFine = fine->value();
     m_prefs.nudgeCoarse = coarse->value();
     m_prefs.nudgeLarge = large->value();
-    m_prefs.loupeZoom = loupe->value();
     m_prefs.equalPageWidths = equalWidths->isChecked();
     AppSettings::saveEditorPrefs(m_prefs);
 
