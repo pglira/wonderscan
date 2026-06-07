@@ -60,6 +60,13 @@ bool isSupportedImage(const QString &path)
     return false;
 }
 
+// A wonderscan project file, per the Open Project dialog filter (*.wsp *.json).
+bool isProjectFile(const QString &path)
+{
+    return path.endsWith(".wsp", Qt::CaseInsensitive)
+           || path.endsWith(".json", Qt::CaseInsensitive);
+}
+
 // Map detected page quads onto a Page per the count rule. Returns the number of
 // pages applied (1 -> 4-point quad, 2 -> 6-point spread), or 0 if detection
 // failed (0 or >2 pages) -- in which case the page is left untouched.
@@ -337,8 +344,17 @@ void MainWindow::addImages(const QStringList &paths)
     selectIndex(m_current < 0 ? firstAdded : m_current);
 }
 
+// External entry point (command-line args, .desktop %F). A project file opens
+// as a project; anything else is added as images.
 void MainWindow::addPaths(const QStringList &paths)
 {
+    for (const QString &path : paths) {
+        if (isProjectFile(path)) {
+            if (maybeSave())
+                loadProjectFile(path);
+            return;
+        }
+    }
     addImages(paths);
 }
 
