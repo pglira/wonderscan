@@ -4,6 +4,8 @@
 #include <QImage>
 #include <QVector>
 
+#include "AppSettings.h"
+#include "Document.h"
 #include "Page.h"
 
 class ImageCanvas;
@@ -67,7 +69,6 @@ private:
     void refreshCurrent();
     void updatePreview();
     void updateFilmstripItem(int i);
-    QImage renderThumbBase(const QString &path) const;
     void rebuildFilmstrip();
     void syncControlsToCurrent();
     bool promptExportSettings();
@@ -83,24 +84,16 @@ private:
     void updateTitle();
     void updateStatus();
 
-    // Model
-    QVector<Page> m_pages;
-    QVector<QImage> m_thumbs; // base thumbnails (EXIF-corrected, unrotated)
-    int m_current = -1;
-    QString m_projectPath;
-    bool m_dirty = false;
-    int m_dpi = 300;
-    int m_jpegQuality = 85;
-    Page::Mode m_lastMode = Page::Four;
+    // Model (page list, thumbnails, export settings, dirty/project-path state).
+    Document m_doc;
+    int m_current = -1;                  // selected page index (view state), or -1
+    Page::Mode m_lastMode = Page::Four;  // sticky defaults applied to new pages
     bool m_lastSplit = false;
 
-    // Persisted preferences (QSettings)
-    QString m_lastDir;          // last folder used in open/save/export dialogs
-    int m_nudgeFine = 1;        // corner nudge steps (image px)
-    int m_nudgeCoarse = 10;
-    int m_nudgeLarge = 25;
-    double m_loupeZoom = 2.0;
-    bool m_equalPageWidths = true; // force equal widths for 6-point spread halves
+    // Persisted preferences (see AppSettings); cached here because some are read
+    // on the preview hot path. lastDir and the recent list live in AppSettings
+    // and are read on demand.
+    EditorPrefs m_prefs;
 
     // Current-image working state
     QImage m_currentOriginal; // EXIF-corrected, unrotated

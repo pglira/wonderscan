@@ -87,7 +87,8 @@ QVector<PageDetector::Quad> PageDetector::detect(const cv::Mat &rgb) const
     double gain; int padX, padY;
     cv::Mat lb = letterbox(rgb, gain, padX, padY);
 
-    // rgb is already RGB (from Warp::qimageToMatRGB), so don't swap channels.
+    // `rgb` is already in RGB channel order (built by ImageConv::toMatRgb), so
+    // tell blobFromImage not to swap channels.
     cv::Mat blob = cv::dnn::blobFromImage(lb, 1.0 / 255.0, cv::Size(kInput, kInput),
                                           cv::Scalar(), /*swapRB=*/false, /*crop=*/false);
 

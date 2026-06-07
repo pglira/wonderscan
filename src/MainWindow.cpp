@@ -1,9 +1,11 @@
 #include "MainWindow.h"
 
+#include "AppSettings.h"
+#include "Document.h"
 #include "ImageCanvas.h"
+#include "ImageConv.h"
 #include "PreviewPane.h"
 #include "PdfExporter.h"
-#include "Project.h"
 #include "Warp.h"
 #include "PageDetector.h"
 
@@ -29,7 +31,6 @@
 #include <QMimeData>
 #include <QPainter>
 #include <QProgressDialog>
-#include <QSettings>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
@@ -44,14 +45,11 @@ const QStringList kImageFilters = {
     "*.jpg", "*.jpeg", "*.png", "*.tif", "*.tiff", "*.bmp", "*.webp"
 };
 
-constexpr int kMaxRecent = 8;
-const QString kRecentKey = QStringLiteral("recentProjects");
-const QString kLastDirKey = QStringLiteral("paths/lastDir");
-const QString kNudgeFineKey = QStringLiteral("nudge/fine");
-const QString kNudgeCoarseKey = QStringLiteral("nudge/coarse");
-const QString kNudgeLargeKey = QStringLiteral("nudge/large");
-const QString kLoupeKey = QStringLiteral("loupe/zoom");
-const QString kEqualWidthsKey = QStringLiteral("render/equalPageWidths");
+// Filmstrip icon size shown in the list. Base thumbnails (kept in Document) are
+// rotated and scaled down to this size per item, so a rotation never re-reads
+// the source file.
+constexpr int kThumbW = 96;
+constexpr int kThumbH = 120;
 
 bool isSupportedImage(const QString &path)
 {
@@ -60,15 +58,6 @@ bool isSupportedImage(const QString &path)
         if (lower.endsWith(f.mid(1)))
             return true;
     return false;
-}
-
-// Apply a 90° rotation step to a page. The marked corners were positioned on
-// the old orientation, so rotating invalidates them.
-void rotatePageBy(Page &p, int deltaDegrees)
-{
-    p.rotation = ((p.rotation + deltaDegrees) % 360 + 360) % 360;
-    p.points.clear();
-    p.marked = false;
 }
 
 // Map detected page quads onto a Page per the count rule. Returns the number of
@@ -125,7 +114,7 @@ void MainWindow::setupUi()
     m_filmstrip->setViewMode(QListView::IconMode);
     m_filmstrip->setFlow(QListView::TopToBottom);
     m_filmstrip->setWrapping(false);
-    m_filmstrip->setIconSize(QSize(96, 120));
+    m_filmstrip->setIconSize(QSize(kThumbW, kThumbH));
     m_filmstrip->setMovement(QListView::Static);
     m_filmstrip->setResizeMode(QListView::Adjust);
     m_filmstrip->setUniformItemSizes(true);
@@ -332,42 +321,15 @@ void MainWindow::addFolderDialog()
     addImages(paths);
 }
 
-QImage MainWindow::renderThumbBase(const QString &path) const
-{
-    QImageReader reader(path);
-    reader.setAutoTransform(true);
-    QSize sz = reader.size();
-    if (sz.isValid()) {
-        sz.scale(192, 192, Qt::KeepAspectRatio);
-        reader.setScaledSize(sz);
-    }
-    QImage img = reader.read();
-    if (img.isNull()) {
-        QImage placeholder(96, 120, QImage::Format_RGB888);
-        placeholder.fill(QColor(90, 70, 70));
-        return placeholder;
-    }
-    return img;
-}
-
 void MainWindow::addImages(const QStringList &paths)
 {
-    if (paths.isEmpty())
-        return;
+    QStringList supported;
+    for (const QString &path : paths)
+        if (isSupportedImage(path))
+            supported << path;
 
-    int firstAdded = m_pages.size();
-    for (const QString &path : paths) {
-        if (!isSupportedImage(path))
-            continue;
-        Page p;
-        p.path = path;
-        p.mode = m_lastMode;
-        p.splitSpread = m_lastSplit;
-        m_pages.push_back(p);
-        m_thumbs.push_back(renderThumbBase(path));
-    }
-
-    if (m_pages.size() == firstAdded)
+    const int firstAdded = m_doc.addImages(supported, m_lastMode, m_lastSplit);
+    if (firstAdded < 0)
         return; // nothing supported was added
 
     rebuildFilmstrip();
@@ -386,24 +348,24 @@ void MainWindow::rebuildFilmstrip()
 {
     QSignalBlocker block(m_filmstrip);
     m_filmstrip->clear();
-    for (int i = 0; i < m_pages.size(); ++i) {
+    for (int i = 0; i < m_doc.pageCount(); ++i) {
         m_filmstrip->addItem(new QListWidgetItem);
         updateFilmstripItem(i);
     }
-    if (m_current >= 0 && m_current < m_pages.size())
+    if (m_current >= 0 && m_current < m_doc.pageCount())
         m_filmstrip->setCurrentRow(m_current);
 }
 
 void MainWindow::updateFilmstripItem(int i)
 {
-    if (i < 0 || i >= m_pages.size() || i >= m_filmstrip->count())
+    if (i < 0 || i >= m_doc.pageCount() || i >= m_filmstrip->count())
         return;
-    const QImage base = m_thumbs.value(i);
-    QImage rot = Warp::applyRotation(base, m_pages[i].rotation);
+    const QImage base = m_doc.thumb(i);
+    QImage rot = Warp::applyRotation(base, m_doc.page(i).rotation);
     QPixmap pm = QPixmap::fromImage(
-        rot.scaled(96, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        rot.scaled(kThumbW, kThumbH, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
-    if (m_pages[i].marked) {
+    if (m_doc.page(i).marked) {
         QPainter p(&pm);
         p.setRenderHint(QPainter::Antialiasing);
         const double d = 20;
@@ -438,7 +400,7 @@ void MainWindow::onFilmstripContextMenu(const QPoint &pos)
     QAction *moveUp = menu.addAction(tr("Move Up"));
     moveUp->setEnabled(row > 0);
     QAction *moveDown = menu.addAction(tr("Move Down"));
-    moveDown->setEnabled(row < m_pages.size() - 1);
+    moveDown->setEnabled(row < m_doc.pageCount() - 1);
     menu.addSeparator();
     QAction *remove = menu.addAction(tr("Remove Image"));
 
@@ -456,28 +418,27 @@ void MainWindow::onFilmstripContextMenu(const QPoint &pos)
 
 void MainWindow::removeCurrentImage()
 {
-    if (m_current < 0 || m_current >= m_pages.size())
+    if (m_current < 0 || m_current >= m_doc.pageCount())
         return;
 
     // Guard marked images (no undo); unmarked ones go without a prompt.
-    if (m_pages[m_current].marked) {
+    if (m_doc.page(m_current).marked) {
         const auto ret = QMessageBox::question(
             this, tr("Remove Image"),
             tr("Remove \"%1\" from the project?\nIts corner markings will be lost.")
-                .arg(QFileInfo(m_pages[m_current].path).fileName()),
+                .arg(QFileInfo(m_doc.page(m_current).path).fileName()),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
         if (ret != QMessageBox::Yes)
             return;
     }
 
     const int removed = m_current;
-    m_pages.remove(removed);
-    m_thumbs.remove(removed);
+    m_doc.removeAt(removed);
     setDirty(true);
 
     int next = removed;
-    if (next >= m_pages.size())
-        next = m_pages.size() - 1; // -1 when the list is now empty
+    if (next >= m_doc.pageCount())
+        next = m_doc.pageCount() - 1; // -1 when the list is now empty
 
     m_current = -1; // force a fresh load in selectIndex
     rebuildFilmstrip();
@@ -500,14 +461,11 @@ void MainWindow::moveCurrentImage(int delta)
 {
     if (m_current < 0)
         return;
-    const int target = m_current + delta;
-    if (target < 0 || target >= m_pages.size())
-        return;
+    const int target = m_doc.move(m_current, delta);
+    if (target == m_current)
+        return; // out of range -> nothing moved
 
-    m_pages.swapItemsAt(m_current, target);
-    m_thumbs.swapItemsAt(m_current, target);
     setDirty(true);
-
     m_current = -1; // force selectIndex to reload and rebind the canvas
     rebuildFilmstrip();
     selectIndex(target);
@@ -522,14 +480,14 @@ void MainWindow::takeOverPreviousPoints()
 {
     if (m_current <= 0)
         return;
-    const Page &prev = m_pages[m_current - 1];
+    const Page &prev = m_doc.page(m_current - 1);
     if (!prev.marked || !prev.hasPoints()) {
         statusBar()->showMessage(
             tr("The previous image has no corners to copy."), 2500);
         return;
     }
 
-    Page &cur = m_pages[m_current];
+    Page &cur = m_doc.page(m_current);
     cur.mode = prev.mode;
     cur.splitSpread = prev.splitSpread;
     cur.points = prev.points;
@@ -573,16 +531,13 @@ void MainWindow::autoDetectCorners()
         return;
     }
 
-    // m_currentRotated -> cv::Mat in RGB order (Format_RGB888 is R,G,B).
-    QImage rgb = m_currentRotated.convertToFormat(QImage::Format_RGB888);
-    cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
-                const_cast<uchar *>(rgb.bits()), rgb.bytesPerLine());
+    const cv::Mat mat = ImageConv::toMatRgb(m_currentRotated);
 
     QApplication::setOverrideCursor(Qt::WaitCursor);
     const QVector<PageDetector::Quad> quads = m_detector->detect(mat);
     QApplication::restoreOverrideCursor();
 
-    const int applied = applyQuadsToPage(m_pages[m_current], quads);
+    const int applied = applyQuadsToPage(m_doc.page(m_current), quads);
     if (applied == 0) {
         const int n = quads.size();
         statusBar()->showMessage(
@@ -591,7 +546,7 @@ void MainWindow::autoDetectCorners()
                         "please mark this image manually.").arg(n), 5000);
         return;
     }
-    m_lastMode = m_pages[m_current].mode;
+    m_lastMode = m_doc.page(m_current).mode;
 
     setDirty(true);
     refreshCurrent();
@@ -609,7 +564,7 @@ void MainWindow::autoDetectCorners()
 // confirmation), so a failed detection never wipes existing corners.
 void MainWindow::autoDetectCornersAll()
 {
-    if (m_pages.isEmpty())
+    if (m_doc.isEmpty())
         return;
 
     if (!m_detector)
@@ -620,10 +575,7 @@ void MainWindow::autoDetectCornersAll()
         return;
     }
 
-    int markedCount = 0;
-    for (const Page &p : m_pages)
-        if (p.marked)
-            ++markedCount;
+    const int markedCount = m_doc.markedCount();
     if (markedCount > 0) {
         const auto choice = QMessageBox::warning(
             this, tr("Auto-detect Corners on All Images"),
@@ -635,17 +587,17 @@ void MainWindow::autoDetectCornersAll()
     }
 
     QProgressDialog progress(tr("Auto-detecting page corners…"), tr("Cancel"),
-                             0, m_pages.size(), this);
+                             0, m_doc.pageCount(), this);
     progress.setWindowModality(Qt::WindowModal);
     progress.setMinimumDuration(0);
 
     int four = 0, six = 0, failed = 0;
-    for (int i = 0; i < m_pages.size(); ++i) {
+    for (int i = 0; i < m_doc.pageCount(); ++i) {
         progress.setValue(i);
         if (progress.wasCanceled())
             break;
 
-        Page &pg = m_pages[i];
+        Page &pg = m_doc.page(i);
         QImageReader reader(pg.path);
         reader.setAutoTransform(true); // honour EXIF, like elsewhere
         const QImage original = reader.read();
@@ -654,9 +606,7 @@ void MainWindow::autoDetectCornersAll()
             continue;
         }
         const QImage rotated = Warp::applyRotation(original, pg.rotation);
-        QImage rgb = rotated.convertToFormat(QImage::Format_RGB888);
-        cv::Mat mat(rgb.height(), rgb.width(), CV_8UC3,
-                    const_cast<uchar *>(rgb.bits()), rgb.bytesPerLine());
+        const cv::Mat mat = ImageConv::toMatRgb(rotated);
 
         const int applied = applyQuadsToPage(pg, m_detector->detect(mat));
         if (applied == 1) ++four;
@@ -665,7 +615,7 @@ void MainWindow::autoDetectCornersAll()
         if (applied > 0)
             updateFilmstripItem(i);
     }
-    progress.setValue(m_pages.size());
+    progress.setValue(m_doc.pageCount());
 
     if (four + six > 0) {
         setDirty(true);
@@ -682,7 +632,7 @@ void MainWindow::autoDetectCornersAll()
 
 void MainWindow::selectIndex(int i)
 {
-    if (i < 0 || i >= m_pages.size()) {
+    if (i < 0 || i >= m_doc.pageCount()) {
         m_current = -1;
         m_canvas->clear();
         m_preview->clear();
@@ -693,7 +643,7 @@ void MainWindow::selectIndex(int i)
 
     m_current = i;
 
-    QImageReader reader(m_pages[i].path);
+    QImageReader reader(m_doc.page(i).path);
     reader.setAutoTransform(true);
     m_currentOriginal = reader.read();
 
@@ -712,7 +662,7 @@ void MainWindow::refreshCurrent()
 {
     if (m_current < 0)
         return;
-    Page &pg = m_pages[m_current];
+    Page &pg = m_doc.page(m_current);
 
     if (m_currentOriginal.isNull()) {
         m_canvas->clear();
@@ -747,7 +697,7 @@ void MainWindow::updatePreview()
         m_preview->clear();
         return;
     }
-    const Page &pg = m_pages[m_current];
+    const Page &pg = m_doc.page(m_current);
     if (!pg.hasPoints() || m_currentProxy.isNull()) {
         m_preview->clear();
         return;
@@ -759,27 +709,32 @@ void MainWindow::updatePreview()
 
     m_preview->setPages(
         Warp::renderPages(m_currentProxy, scaled, pg.mode, pg.splitSpread,
-                          m_equalPageWidths));
+                          m_prefs.equalPageWidths));
 }
 
 void MainWindow::syncControlsToCurrent()
 {
+    // Per-image actions need a current selection; batch actions only need at
+    // least one image present. This is the single place action enablement lives.
     const bool has = (m_current >= 0);
+    const bool anyImages = !m_doc.isEmpty();
     m_actRotL->setEnabled(has);
     m_actRotR->setEnabled(has);
     m_actRemove->setEnabled(has);
     m_actMoveUp->setEnabled(has && m_current > 0);
-    m_actMoveDown->setEnabled(has && m_current < m_pages.size() - 1);
-    m_actTakePrev->setEnabled(has && m_current > 0 && m_pages[m_current - 1].marked);
+    m_actMoveDown->setEnabled(has && m_current < m_doc.pageCount() - 1);
+    m_actTakePrev->setEnabled(has && m_current > 0 && m_doc.page(m_current - 1).marked);
     m_actAutoDetect->setEnabled(has);
-    m_actAutoDetectAll->setEnabled(!m_pages.isEmpty());
+    m_actAutoDetectAll->setEnabled(anyImages);
+    m_actRotAllL->setEnabled(anyImages);
+    m_actRotAllR->setEnabled(anyImages);
     m_chkSixPoint->setEnabled(has);
 
     if (!has) {
         m_chkSplit->setEnabled(false);
         return;
     }
-    const Page &pg = m_pages[m_current];
+    const Page &pg = m_doc.page(m_current);
     {
         QSignalBlocker b1(m_chkSixPoint);
         m_chkSixPoint->setChecked(pg.mode == Page::Six);
@@ -817,7 +772,7 @@ void MainWindow::rotateCurrent(int deltaDegrees)
 {
     if (m_current < 0)
         return;
-    rotatePageBy(m_pages[m_current], deltaDegrees);
+    m_doc.rotateAt(m_current, deltaDegrees);
     setDirty(true);
     refreshCurrent();
     updateFilmstripItem(m_current);
@@ -835,30 +790,23 @@ void MainWindow::rotateAllRight()
 
 void MainWindow::rotateAll(int deltaDegrees)
 {
-    if (m_pages.isEmpty())
+    if (m_doc.isEmpty())
         return;
 
     // Rotating clears corners (like the single-image rotate), so warn before
     // discarding any markings the user already made.
-    bool anyMarked = false;
-    for (const Page &p : m_pages)
-        if (p.marked) {
-            anyMarked = true;
-            break;
-        }
-    if (anyMarked) {
+    if (m_doc.anyMarked()) {
         const auto ret = QMessageBox::question(
             this, tr("Rotate All Images"),
             tr("Rotating every image will clear the corner markings on all "
                "already-marked pages.\n\nRotate all %n image(s) anyway?", "",
-               m_pages.size()),
+               m_doc.pageCount()),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
         if (ret != QMessageBox::Yes)
             return;
     }
 
-    for (Page &p : m_pages)
-        rotatePageBy(p, deltaDegrees);
+    m_doc.rotateAll(deltaDegrees);
 
     setDirty(true);
     rebuildFilmstrip(); // refresh every thumbnail at the new rotation
@@ -871,7 +819,7 @@ void MainWindow::onModeToggled(bool six)
 {
     if (m_current < 0)
         return;
-    Page &pg = m_pages[m_current];
+    Page &pg = m_doc.page(m_current);
     pg.mode = six ? Page::Six : Page::Four;
     m_lastMode = pg.mode;
     pg.points.clear();
@@ -887,7 +835,7 @@ void MainWindow::onSplitToggled(bool split)
 {
     if (m_current < 0)
         return;
-    Page &pg = m_pages[m_current];
+    Page &pg = m_doc.page(m_current);
     pg.splitSpread = split;
     m_lastSplit = split;
     setDirty(true);
@@ -902,7 +850,7 @@ void MainWindow::goPrev()
 
 void MainWindow::goNext()
 {
-    if (m_current >= 0 && m_current < m_pages.size() - 1)
+    if (m_current >= 0 && m_current < m_doc.pageCount() - 1)
         selectIndex(m_current + 1);
 }
 
@@ -913,7 +861,7 @@ void MainWindow::openProject()
     if (!maybeSave())
         return;
     const QString path = QFileDialog::getOpenFileName(
-        this, tr("Open Project"), m_lastDir,
+        this, tr("Open Project"), AppSettings::lastDir(),
         tr("wonderscan project (*.wsp *.json)"));
     if (path.isEmpty())
         return;
@@ -922,43 +870,30 @@ void MainWindow::openProject()
 
 bool MainWindow::loadProjectFile(const QString &path)
 {
-    Project project;
     QString err;
-    if (!ProjectIO::load(path, &project, &err)) {
+    if (!m_doc.load(path, &err)) {
         QMessageBox::warning(this, tr("Open failed"), err);
         removeFromRecent(path); // drop a stale entry if this came from the list
         return false;
     }
 
-    m_pages = project.pages;
-    m_dpi = project.dpi;
-    m_jpegQuality = project.jpegQuality;
-    m_projectPath = path;
-
-    m_thumbs.clear();
-    for (const Page &p : m_pages)
-        m_thumbs.push_back(renderThumbBase(p.path));
-
     m_current = -1;
     rebuildFilmstrip();
     setDirty(false);
-    selectIndex(m_pages.isEmpty() ? -1 : 0);
+    selectIndex(m_doc.isEmpty() ? -1 : 0);
     updateTitle();
     addToRecent(path);
     setLastDir(QFileInfo(path).absolutePath());
 
     // Projects store absolute image paths; warn if any no longer resolve (e.g.
     // the images were moved/renamed) instead of silently showing blank pages.
-    QStringList missing;
-    for (const Page &p : m_pages)
-        if (!QFileInfo::exists(p.path))
-            missing << p.path;
+    const QStringList missing = m_doc.missingImagePaths();
     if (!missing.isEmpty()) {
         const QStringList shown = missing.mid(0, 10);
         QString body = tr("%1 of %2 image(s) referenced by this project could not "
                           "be found at their saved (absolute) paths:\n\n%3")
                            .arg(missing.size())
-                           .arg(m_pages.size())
+                           .arg(m_doc.pageCount())
                            .arg(shown.join(QStringLiteral("\n")));
         if (missing.size() > shown.size())
             body += tr("\n… and %1 more.").arg(missing.size() - shown.size());
@@ -971,30 +906,26 @@ bool MainWindow::loadProjectFile(const QString &path)
 
 bool MainWindow::saveProject()
 {
-    if (m_projectPath.isEmpty())
+    if (m_doc.isUntitled())
         return saveProjectAs();
 
-    Project project;
-    project.pages = m_pages;
-    project.dpi = m_dpi;
-    project.jpegQuality = m_jpegQuality;
-
     QString err;
-    if (!ProjectIO::save(m_projectPath, project, &err)) {
+    if (!m_doc.save(m_doc.path(), &err)) {
         QMessageBox::warning(this, tr("Save failed"), err);
         return false;
     }
     setDirty(false);
-    addToRecent(m_projectPath);
-    setLastDir(QFileInfo(m_projectPath).absolutePath());
+    addToRecent(m_doc.path());
+    setLastDir(QFileInfo(m_doc.path()).absolutePath());
     return true;
 }
 
 bool MainWindow::saveProjectAs()
 {
-    const QString suggested = m_lastDir.isEmpty()
+    const QString lastDir = AppSettings::lastDir();
+    const QString suggested = lastDir.isEmpty()
                                   ? QStringLiteral("project.wsp")
-                                  : QDir(m_lastDir).filePath(QStringLiteral("project.wsp"));
+                                  : QDir(lastDir).filePath(QStringLiteral("project.wsp"));
     QString path = QFileDialog::getSaveFileName(
         this, tr("Save Project As"), suggested,
         tr("wonderscan project (*.wsp)"));
@@ -1003,7 +934,7 @@ bool MainWindow::saveProjectAs()
     if (!path.endsWith(".wsp", Qt::CaseInsensitive)
         && !path.endsWith(".json", Qt::CaseInsensitive))
         path += ".wsp";
-    m_projectPath = path;
+    m_doc.setPath(path);
     updateTitle();
     return saveProject();
 }
@@ -1013,54 +944,32 @@ bool MainWindow::saveProjectAs()
 // Push the current nudge/loupe preferences into the canvas.
 void MainWindow::applyEditorSettings()
 {
-    m_canvas->setNudgeSteps(m_nudgeFine, m_nudgeCoarse, m_nudgeLarge);
-    m_canvas->setLoupeZoom(m_loupeZoom);
+    m_canvas->setNudgeSteps(m_prefs.nudgeFine, m_prefs.nudgeCoarse, m_prefs.nudgeLarge);
+    m_canvas->setLoupeZoom(m_prefs.loupeZoom);
 }
 
 void MainWindow::loadSettings()
 {
-    QSettings s;
-    m_nudgeFine = s.value(kNudgeFineKey, m_nudgeFine).toInt();
-    m_nudgeCoarse = s.value(kNudgeCoarseKey, m_nudgeCoarse).toInt();
-    m_nudgeLarge = s.value(kNudgeLargeKey, m_nudgeLarge).toInt();
-    m_loupeZoom = s.value(kLoupeKey, m_loupeZoom).toDouble();
-    m_equalPageWidths = s.value(kEqualWidthsKey, m_equalPageWidths).toBool();
-    m_lastDir = s.value(kLastDirKey).toString();
-
+    m_prefs = AppSettings::loadEditorPrefs();
     applyEditorSettings();
     updateRecentMenu();
 }
 
 void MainWindow::setLastDir(const QString &dir)
 {
-    if (dir.isEmpty() || dir == m_lastDir)
-        return;
-    m_lastDir = dir;
-    QSettings().setValue(kLastDirKey, m_lastDir);
+    AppSettings::setLastDir(dir);
 }
 
 void MainWindow::addToRecent(const QString &path)
 {
-    const QString abs = QFileInfo(path).absoluteFilePath();
-    QSettings s;
-    QStringList recent = s.value(kRecentKey).toStringList();
-    recent.removeAll(abs);
-    recent.prepend(abs);
-    while (recent.size() > kMaxRecent)
-        recent.removeLast();
-    s.setValue(kRecentKey, recent);
+    AppSettings::addRecentProject(path);
     updateRecentMenu();
 }
 
 void MainWindow::removeFromRecent(const QString &path)
 {
-    const QString abs = QFileInfo(path).absoluteFilePath();
-    QSettings s;
-    QStringList recent = s.value(kRecentKey).toStringList();
-    if (recent.removeAll(abs) > 0) {
-        s.setValue(kRecentKey, recent);
+    if (AppSettings::removeRecentProject(path))
         updateRecentMenu();
-    }
 }
 
 void MainWindow::updateRecentMenu()
@@ -1069,7 +978,7 @@ void MainWindow::updateRecentMenu()
         return;
     m_recentMenu->clear();
 
-    const QStringList recent = QSettings().value(kRecentKey).toStringList();
+    const QStringList recent = AppSettings::recentProjects();
     if (recent.isEmpty()) {
         QAction *empty = m_recentMenu->addAction(tr("(No recent projects)"));
         empty->setEnabled(false);
@@ -1093,7 +1002,7 @@ void MainWindow::updateRecentMenu()
     m_recentMenu->addSeparator();
     connect(m_recentMenu->addAction(tr("Clear List")), &QAction::triggered, this,
             [this] {
-                QSettings().remove(kRecentKey);
+                AppSettings::clearRecentProjects();
                 updateRecentMenu();
             });
 }
@@ -1111,9 +1020,9 @@ void MainWindow::openSettingsDialog()
         sb->setValue(value);
         return sb;
     };
-    auto *fine = makeStep(m_nudgeFine);
-    auto *coarse = makeStep(m_nudgeCoarse);
-    auto *large = makeStep(m_nudgeLarge);
+    auto *fine = makeStep(m_prefs.nudgeFine);
+    auto *coarse = makeStep(m_prefs.nudgeCoarse);
+    auto *large = makeStep(m_prefs.nudgeLarge);
     form->addRow(tr("Nudge (arrow):"), fine);
     form->addRow(tr("Nudge (Shift):"), coarse);
     form->addRow(tr("Nudge (Ctrl+Shift):"), large);
@@ -1122,12 +1031,12 @@ void MainWindow::openSettingsDialog()
     loupe->setRange(1.5, 12.0);
     loupe->setSingleStep(0.5);
     loupe->setSuffix(QStringLiteral("x"));
-    loupe->setValue(m_loupeZoom);
+    loupe->setValue(m_prefs.loupeZoom);
     form->addRow(tr("Loupe zoom:"), loupe);
 
     auto *equalWidths =
         new QCheckBox(tr("Equal page widths in two-page spreads"), &dlg);
-    equalWidths->setChecked(m_equalPageWidths);
+    equalWidths->setChecked(m_prefs.equalPageWidths);
     form->addRow(equalWidths);
 
     auto *buttons = new QDialogButtonBox(
@@ -1139,18 +1048,12 @@ void MainWindow::openSettingsDialog()
     if (dlg.exec() != QDialog::Accepted)
         return;
 
-    m_nudgeFine = fine->value();
-    m_nudgeCoarse = coarse->value();
-    m_nudgeLarge = large->value();
-    m_loupeZoom = loupe->value();
-    m_equalPageWidths = equalWidths->isChecked();
-
-    QSettings s;
-    s.setValue(kNudgeFineKey, m_nudgeFine);
-    s.setValue(kNudgeCoarseKey, m_nudgeCoarse);
-    s.setValue(kNudgeLargeKey, m_nudgeLarge);
-    s.setValue(kLoupeKey, m_loupeZoom);
-    s.setValue(kEqualWidthsKey, m_equalPageWidths);
+    m_prefs.nudgeFine = fine->value();
+    m_prefs.nudgeCoarse = coarse->value();
+    m_prefs.nudgeLarge = large->value();
+    m_prefs.loupeZoom = loupe->value();
+    m_prefs.equalPageWidths = equalWidths->isChecked();
+    AppSettings::saveEditorPrefs(m_prefs);
 
     applyEditorSettings();
     updatePreview(); // reflect the spread-width change live (no-op if no image)
@@ -1168,14 +1071,14 @@ bool MainWindow::promptExportSettings()
 
     auto *dpiSpin = new QSpinBox(&dlg);
     dpiSpin->setRange(72, 1200);
-    dpiSpin->setValue(m_dpi);
+    dpiSpin->setValue(m_doc.dpi());
     dpiSpin->setSuffix(tr(" dpi"));
     form->addRow(tr("Resolution:"), dpiSpin);
 
     auto *qSlider = new QSlider(Qt::Horizontal, &dlg);
     qSlider->setRange(1, 100);
-    qSlider->setValue(m_jpegQuality);
-    auto *qLabel = new QLabel(QString::number(m_jpegQuality), &dlg);
+    qSlider->setValue(m_doc.jpegQuality());
+    auto *qLabel = new QLabel(QString::number(m_doc.jpegQuality()), &dlg);
     connect(qSlider, &QSlider::valueChanged, qLabel,
             [qLabel](int v) { qLabel->setNum(v); });
     auto *qRow = new QWidget(&dlg);
@@ -1193,22 +1096,22 @@ bool MainWindow::promptExportSettings()
     if (dlg.exec() != QDialog::Accepted)
         return false;
 
-    m_dpi = dpiSpin->value();
-    m_jpegQuality = qSlider->value();
+    m_doc.setDpi(dpiSpin->value());
+    m_doc.setJpegQuality(qSlider->value());
     setDirty(true);
     return true;
 }
 
 void MainWindow::exportPdf()
 {
-    if (m_pages.isEmpty()) {
+    if (m_doc.isEmpty()) {
         QMessageBox::information(this, tr("Export"), tr("No images loaded."));
         return;
     }
 
     QVector<const Page *> ready;
     int unmarked = 0;
-    for (const Page &p : m_pages) {
+    for (const Page &p : m_doc.pages()) {
         if (p.readyForExport())
             ready.push_back(&p);
         else
@@ -1227,7 +1130,7 @@ void MainWindow::exportPdf()
             this, tr("Export"),
             tr("%1 of %2 images have no corners set and will be skipped.\n\n"
                "Export the %3 marked page(s)?")
-                .arg(unmarked).arg(m_pages.size()).arg(ready.size()),
+                .arg(unmarked).arg(m_doc.pageCount()).arg(ready.size()),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
         if (ret != QMessageBox::Yes)
             return;
@@ -1236,12 +1139,12 @@ void MainWindow::exportPdf()
     if (!promptExportSettings())
         return;
 
-    QString defaultDir = m_lastDir;
+    QString defaultDir = AppSettings::lastDir();
     if (defaultDir.isEmpty()) {
-        if (!m_projectPath.isEmpty())
-            defaultDir = QFileInfo(m_projectPath).absolutePath();
-        else if (!m_pages.isEmpty())
-            defaultDir = QFileInfo(m_pages.first().path).absolutePath();
+        if (!m_doc.isUntitled())
+            defaultDir = QFileInfo(m_doc.path()).absolutePath();
+        else if (!m_doc.isEmpty())
+            defaultDir = QFileInfo(m_doc.page(0).path).absolutePath();
     }
     const QString defaultPath = QDir(defaultDir).filePath("wonderscan.pdf");
 
@@ -1252,8 +1155,9 @@ void MainWindow::exportPdf()
 
     QApplication::setOverrideCursor(Qt::WaitCursor);
     QString err;
-    const bool ok = PdfExporter::exportPdf(out, ready, m_dpi, m_jpegQuality, &err,
-                                           m_equalPageWidths);
+    const bool ok = PdfExporter::exportPdf(out, ready, m_doc.dpi(),
+                                           m_doc.jpegQuality(), &err,
+                                           m_prefs.equalPageWidths);
     QApplication::restoreOverrideCursor();
 
     if (ok) {
@@ -1270,13 +1174,13 @@ void MainWindow::exportPdf()
 
 void MainWindow::setDirty(bool dirty)
 {
-    m_dirty = dirty;
+    m_doc.setDirty(dirty);
     setWindowModified(dirty);
 }
 
 bool MainWindow::maybeSave()
 {
-    if (!m_dirty)
+    if (!m_doc.dirty())
         return true;
     const auto ret = QMessageBox::warning(
         this, tr("wonderscan"),
@@ -1289,30 +1193,23 @@ bool MainWindow::maybeSave()
 
 void MainWindow::updateTitle()
 {
-    QString name = m_projectPath.isEmpty()
+    QString name = m_doc.isUntitled()
                        ? tr("Untitled")
-                       : QFileInfo(m_projectPath).fileName();
+                       : QFileInfo(m_doc.path()).fileName();
     setWindowTitle(tr("wonderscan — %1[*]").arg(name));
 }
 
 void MainWindow::updateStatus()
 {
-    // Rotate-all acts on the whole batch, so it only needs images present.
-    const bool anyImages = !m_pages.isEmpty();
-    if (m_actRotAllL)
-        m_actRotAllL->setEnabled(anyImages);
-    if (m_actRotAllR)
-        m_actRotAllR->setEnabled(anyImages);
-
     if (m_current < 0) {
-        m_statusLabel->setText(tr("%n image(s) loaded.", "", m_pages.size()));
+        m_statusLabel->setText(tr("%n image(s) loaded.", "", m_doc.pageCount()));
         return;
     }
-    const Page &pg = m_pages[m_current];
+    const Page &pg = m_doc.page(m_current);
     m_statusLabel->setText(
         tr("%1 / %2  —  %3  —  %4  —  %5")
             .arg(m_current + 1)
-            .arg(m_pages.size())
+            .arg(m_doc.pageCount())
             .arg(QFileInfo(pg.path).fileName())
             .arg(pg.mode == Page::Six
                      ? (pg.splitSpread ? tr("2 pages (split)") : tr("2 pages (stitched)"))

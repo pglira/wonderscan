@@ -1,5 +1,7 @@
 #include "Warp.h"
 
+#include "ImageConv.h"
+
 #include <QTransform>
 #include <algorithm>
 #include <cmath>
@@ -8,23 +10,6 @@
 #include <opencv2/imgproc.hpp>
 
 namespace {
-
-cv::Mat qimageToMatRGB(const QImage &in)
-{
-    QImage img = in.convertToFormat(QImage::Format_RGB888);
-    cv::Mat view(img.height(), img.width(), CV_8UC3,
-                 const_cast<uchar *>(img.bits()),
-                 static_cast<size_t>(img.bytesPerLine()));
-    return view.clone(); // own contiguous copy
-}
-
-QImage matToQImageRGB(const cv::Mat &mat)
-{
-    // mat is CV_8UC3, RGB order.
-    QImage img(mat.data, mat.cols, mat.rows,
-               static_cast<int>(mat.step), QImage::Format_RGB888);
-    return img.copy();
-}
 
 double dist(const QPointF &a, const QPointF &b)
 {
@@ -126,11 +111,11 @@ QVector<QImage> renderPages(const QImage &rotated,
     if (points.size() != expected || rotated.isNull())
         return {};
 
-    cv::Mat src = qimageToMatRGB(rotated);
+    cv::Mat src = ImageConv::toMatRgb(rotated);
 
     if (mode == Page::Four) {
         cv::Mat page = dewarpQuad(src, points[0], points[1], points[2], points[3]);
-        return { matToQImageRGB(page) };
+        return { ImageConv::toQImageRgb(page) };
     }
 
     // Six-point spread. Points: [TL, TopSpine, TR, BR, BottomSpine, BL].
@@ -158,11 +143,11 @@ QVector<QImage> renderPages(const QImage &rotated,
     cv::Mat right = ruledWarp(src, topS, tr, br, botS, WR, H);
 
     if (splitSpread)
-        return { matToQImageRGB(left), matToQImageRGB(right) };
+        return { ImageConv::toQImageRgb(left), ImageConv::toQImageRgb(right) };
 
     cv::Mat spread;
     cv::hconcat(left, right, spread); // equal height -> continuous across seam
-    return { matToQImageRGB(spread) };
+    return { ImageConv::toQImageRgb(spread) };
 }
 
 } // namespace Warp

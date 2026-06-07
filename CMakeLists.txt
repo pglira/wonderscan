@@ -21,8 +21,11 @@ qt_add_executable(wonderscan
   src/main.cpp
   src/Page.cpp
   src/Warp.cpp
+  src/ImageConv.cpp
+  src/AppSettings.cpp
   src/PdfExporter.cpp
   src/Project.cpp
+  src/Document.cpp
   src/ImageCanvas.cpp
   src/PreviewPane.cpp
   src/PageDetector.cpp

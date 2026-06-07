@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "Document.h"
 #include "MainWindow.h"
 #include "Page.h"
 #include "PdfExporter.h"
@@ -39,9 +40,114 @@ static double seamMaxJump(const QImage &spread)
     return maxJump;
 }
 
+// Pure-logic checks for the Document model (collection edits + project I/O
+// round-trip). No display, no real image files needed.
+#define WS_CHECK(cond)                                                          \
+    do {                                                                        \
+        if (!(cond)) {                                                          \
+            qCritical() << "MODEL TEST FAILED:" << #cond;                       \
+            return 1;                                                           \
+        }                                                                       \
+    } while (0)
+
+static int runModelTests()
+{
+    // ---- collection operations ----
+    Document doc;
+    WS_CHECK(doc.addImages({}, Page::Four, false) == -1); // empty -> no-op
+    WS_CHECK(doc.addImages({"/ws/a.jpg", "/ws/b.jpg", "/ws/c.jpg"},
+                           Page::Four, false) == 0); // first appended index
+    WS_CHECK(doc.pageCount() == 3);
+    WS_CHECK(doc.addImages({"/ws/d.jpg"}, Page::Six, true) == 3); // appends at end
+    WS_CHECK(doc.pageCount() == 4);
+    WS_CHECK(doc.page(3).mode == Page::Six && doc.page(3).splitSpread);
+
+    // reorder: swap, and out-of-range no-ops
+    WS_CHECK(doc.move(0, 1) == 1);
+    WS_CHECK(doc.page(0).path == "/ws/b.jpg" && doc.page(1).path == "/ws/a.jpg");
+    WS_CHECK(doc.move(0, -1) == 0);          // off the top -> unchanged
+    WS_CHECK(doc.move(3, 1) == 3);           // off the bottom -> unchanged
+    WS_CHECK(doc.page(1).path == "/ws/a.jpg");
+
+    // rotation clears that page's corners and wraps mod 360
+    doc.page(0).marked = true;
+    doc.page(0).points = {QPointF(1, 2)};
+    doc.rotateAt(0, 90);
+    WS_CHECK(doc.page(0).rotation == 90);
+    WS_CHECK(!doc.page(0).marked && doc.page(0).points.isEmpty());
+    doc.rotateAt(0, -180);
+    WS_CHECK(doc.page(0).rotation == 270);   // (90 - 180) wrapped
+    doc.rotateAll(90);
+    WS_CHECK(doc.page(0).rotation == 0);      // 270 + 90 -> 360 -> 0
+    WS_CHECK(doc.page(1).rotation == 90);
+
+    // markedCount / anyMarked / removeAt
+    Document d2;
+    d2.addImages({"/a", "/b", "/c"}, Page::Four, false);
+    WS_CHECK(d2.markedCount() == 0 && !d2.anyMarked());
+    d2.page(0).marked = true;
+    d2.page(2).marked = true;
+    WS_CHECK(d2.markedCount() == 2 && d2.anyMarked());
+    d2.removeAt(1);
+    WS_CHECK(d2.pageCount() == 2);
+    WS_CHECK(d2.page(0).path == "/a" && d2.page(1).path == "/c");
+    d2.removeAt(5); // out of range -> no-op
+    WS_CHECK(d2.pageCount() == 2);
+
+    // ---- project I/O round-trip ----
+    Document src;
+    src.addImages({"/img/p1.jpg", "/img/p2.jpg"}, Page::Four, false);
+    src.setDpi(600);
+    src.setJpegQuality(72);
+    src.page(0).rotation = 180;
+    src.page(0).marked = true;
+    src.page(0).points = {{10, 20}, {110, 22}, {108, 210}, {12, 208}};
+    src.page(1).mode = Page::Six;
+    src.page(1).splitSpread = true;
+    src.page(1).marked = true;
+    src.page(1).points = {{1, 1}, {50, 1}, {99, 1}, {99, 99}, {50, 99}, {1, 99}};
+
+    const QString wsp = QDir::tempPath() + "/wonderscan_modeltest.wsp";
+    QString err;
+    WS_CHECK(src.save(wsp, &err)); // save succeeds...
+    WS_CHECK(!src.dirty());        // ...and clears dirty
+    WS_CHECK(src.path() == wsp);
+
+    Document dst;
+    dst.setDirty(true);
+    WS_CHECK(dst.load(wsp, &err)); // load succeeds...
+    WS_CHECK(!dst.dirty());        // ...and clears dirty
+    WS_CHECK(dst.path() == wsp);
+    WS_CHECK(dst.dpi() == 600 && dst.jpegQuality() == 72);
+    WS_CHECK(dst.pageCount() == 2);
+
+    for (int i = 0; i < 2; ++i) {
+        const Page &a = src.page(i);
+        const Page &b = dst.page(i);
+        WS_CHECK(a.path == b.path && a.rotation == b.rotation && a.mode == b.mode);
+        WS_CHECK(a.splitSpread == b.splitSpread && a.marked == b.marked);
+        WS_CHECK(a.points.size() == b.points.size());
+        for (int k = 0; k < a.points.size(); ++k) {
+            WS_CHECK(std::abs(a.points[k].x() - b.points[k].x()) < 1e-6);
+            WS_CHECK(std::abs(a.points[k].y() - b.points[k].y()) < 1e-6);
+        }
+    }
+
+    // these fake paths don't exist on disk -> both reported missing
+    WS_CHECK(dst.missingImagePaths().size() == 2);
+
+    qInfo().noquote() << "MODEL TESTS PASS";
+    return 0;
+}
+
+#undef WS_CHECK
+
 // Headless verification of the warp + PDF pipeline (no display needed).
 static int runSelfTest(const QString &outPdf)
 {
+    if (const int rc = runModelTests(); rc != 0)
+        return rc;
+
     QImage src(1600, 1200, QImage::Format_RGB888);
     src.fill(QColor(40, 40, 40));
     {
