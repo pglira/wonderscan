@@ -70,7 +70,8 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
 6. The **preview pane** (right) shows the rectified result live.
 7. **Remove** an unwanted image with `Delete`, the toolbar button, or
    right-click → Remove in the filmstrip (removes it from the project only —
-   the file on disk is untouched).
+   the file on disk is untouched). **Reorder** pages with `Alt+↑` / `Alt+↓`
+   (or right-click → Move Up / Move Down) — pages export in filmstrip order.
 8. **Save Project** (`Ctrl+S`) to store your corners/rotation/mode as a `.wsp`
    JSON file you can reopen later. Recently used projects are listed under
    **File → Open Recent**, and the open/save/export dialogs reopen in the last
@@ -87,6 +88,7 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
 | Export PDF        | `Ctrl+E`        |
 | Rotate left/right | `[` / `]`       |
 | Remove image      | `Delete`        |
+| Move image up/down | `Alt+↑` / `Alt+↓` |
 | Previous / next   | `p` / `n`       |
 | Select corner     | `1`–`6`         |
 | Cycle corners     | `Tab` / `Shift+Tab` |

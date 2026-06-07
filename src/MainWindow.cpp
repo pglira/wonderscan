@@ -85,13 +85,25 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 void MainWindow::setupUi()
 {
     m_filmstrip = new QListWidget(this);
-    m_filmstrip->setViewMode(QListView::ListMode);
+    // IconMode (single, non-wrapping column) so the selection highlight hugs the
+    // thumbnail rather than spanning a full-width row — there is no longer a
+    // filename beside the thumbnail to fill that width.
+    m_filmstrip->setViewMode(QListView::IconMode);
+    m_filmstrip->setFlow(QListView::TopToBottom);
+    m_filmstrip->setWrapping(false);
     m_filmstrip->setIconSize(QSize(96, 120));
     m_filmstrip->setMovement(QListView::Static);
-    m_filmstrip->setUniformItemSizes(false);
-    m_filmstrip->setSpacing(2);
-    m_filmstrip->setMinimumWidth(160);
-    m_filmstrip->setMaximumWidth(220);
+    m_filmstrip->setResizeMode(QListView::Adjust);
+    m_filmstrip->setUniformItemSizes(true);
+    m_filmstrip->setSpacing(4);
+    m_filmstrip->setMinimumWidth(124);
+    m_filmstrip->setMaximumWidth(160);
+    // Mark the selected thumbnail with a crisp frame tight to the image, rather
+    // than relying on the theme's (here barely visible) IconMode tint.
+    m_filmstrip->setStyleSheet(
+        "QListWidget::item { border: 2px solid transparent; }"
+        "QListWidget::item:selected { border-color: #4a90d9;"
+        " background: rgba(74,144,217,45); }");
     m_filmstrip->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_filmstrip, &QListWidget::currentRowChanged,
             this, &MainWindow::onFilmstripRow);
@@ -111,7 +123,7 @@ void MainWindow::setupUi()
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
     splitter->setStretchFactor(2, 0);
-    splitter->setSizes({180, 900, 320});
+    splitter->setSizes({130, 900, 320});
     setCentralWidget(splitter);
 
     m_statusLabel = new QLabel(this);
@@ -183,6 +195,14 @@ void MainWindow::setupActions()
     m_actRemove->setShortcut(QKeySequence::Delete);
     connect(m_actRemove, &QAction::triggered, this, &MainWindow::removeCurrentImage);
 
+    m_actMoveUp = new QAction(tr("Move Image &Up"), this);
+    m_actMoveUp->setShortcut(QKeySequence(Qt::ALT | Qt::Key_Up));
+    connect(m_actMoveUp, &QAction::triggered, this, &MainWindow::moveCurrentImageUp);
+
+    m_actMoveDown = new QAction(tr("Move Image &Down"), this);
+    m_actMoveDown->setShortcut(QKeySequence(Qt::ALT | Qt::Key_Down));
+    connect(m_actMoveDown, &QAction::triggered, this, &MainWindow::moveCurrentImageDown);
+
     m_chkSixPoint = new QCheckBox(tr("Two pages (6 pts)"), this);
     connect(m_chkSixPoint, &QCheckBox::toggled, this, &MainWindow::onModeToggled);
 
@@ -204,6 +224,8 @@ void MainWindow::setupActions()
     editMenu->addAction(m_actRotAllR);
     editMenu->addSeparator();
     editMenu->addAction(m_actRemove);
+    editMenu->addAction(m_actMoveUp);
+    editMenu->addAction(m_actMoveDown);
     editMenu->addSeparator();
     editMenu->addAction(m_actPrev);
     editMenu->addAction(m_actNext);
@@ -352,11 +374,23 @@ void MainWindow::onFilmstripContextMenu(const QPoint &pos)
     const int row = m_filmstrip->row(item);
 
     QMenu menu(this);
+    QAction *moveUp = menu.addAction(tr("Move Up"));
+    moveUp->setEnabled(row > 0);
+    QAction *moveDown = menu.addAction(tr("Move Down"));
+    moveDown->setEnabled(row < m_pages.size() - 1);
+    menu.addSeparator();
     QAction *remove = menu.addAction(tr("Remove Image"));
-    if (menu.exec(m_filmstrip->mapToGlobal(pos)) == remove) {
-        selectIndex(row);
+
+    QAction *chosen = menu.exec(m_filmstrip->mapToGlobal(pos));
+    if (!chosen)
+        return;
+    selectIndex(row);
+    if (chosen == moveUp)
+        moveCurrentImage(-1);
+    else if (chosen == moveDown)
+        moveCurrentImage(1);
+    else if (chosen == remove)
         removeCurrentImage();
-    }
 }
 
 void MainWindow::removeCurrentImage()
@@ -387,6 +421,35 @@ void MainWindow::removeCurrentImage()
     m_current = -1; // force a fresh load in selectIndex
     rebuildFilmstrip();
     selectIndex(next);
+}
+
+void MainWindow::moveCurrentImageUp()
+{
+    moveCurrentImage(-1);
+}
+
+void MainWindow::moveCurrentImageDown()
+{
+    moveCurrentImage(1);
+}
+
+// Swap the current image with its neighbour `delta` rows away and keep it
+// selected, so the user can reorder pages within the filmstrip.
+void MainWindow::moveCurrentImage(int delta)
+{
+    if (m_current < 0)
+        return;
+    const int target = m_current + delta;
+    if (target < 0 || target >= m_pages.size())
+        return;
+
+    m_pages.swapItemsAt(m_current, target);
+    m_thumbs.swapItemsAt(m_current, target);
+    setDirty(true);
+
+    m_current = -1; // force selectIndex to reload and rebind the canvas
+    rebuildFilmstrip();
+    selectIndex(target);
 }
 
 // ---- Selection / current image ---------------------------------------------
@@ -478,6 +541,8 @@ void MainWindow::syncControlsToCurrent()
     m_actRotL->setEnabled(has);
     m_actRotR->setEnabled(has);
     m_actRemove->setEnabled(has);
+    m_actMoveUp->setEnabled(has && m_current > 0);
+    m_actMoveDown->setEnabled(has && m_current < m_pages.size() - 1);
     m_chkSixPoint->setEnabled(has);
 
     if (!has) {

@@ -38,6 +38,8 @@ private slots:
     void onFilmstripRow(int row);
     void onFilmstripContextMenu(const QPoint &pos);
     void removeCurrentImage();
+    void moveCurrentImageUp();
+    void moveCurrentImageDown();
     void onPointsChanged();
     void rotateLeft();
     void rotateRight();
@@ -53,6 +55,7 @@ private:
     void setupUi();
     void setupActions();
     void addImages(const QStringList &paths);
+    void moveCurrentImage(int delta); // reorder current image within the filmstrip
     void rotateCurrent(int deltaDegrees);
     void rotateAll(int deltaDegrees);
     void selectIndex(int i);
@@ -116,4 +119,6 @@ private:
     QAction *m_actRotAllL = nullptr;
     QAction *m_actRotAllR = nullptr;
     QAction *m_actRemove = nullptr;
+    QAction *m_actMoveUp = nullptr;
+    QAction *m_actMoveDown = nullptr;
 };
