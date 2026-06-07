@@ -820,10 +820,21 @@ void MainWindow::onModeToggled(bool six)
     if (m_current < 0)
         return;
     Page &pg = m_doc.page(m_current);
-    pg.mode = six ? Page::Six : Page::Four;
+    const Page::Mode newMode = six ? Page::Six : Page::Four;
+
+    // Preserve digitized corners across the switch: a marked 4-point quad gains
+    // spine points at the top/bottom edge midpoints, a marked 6-point spread
+    // drops its spine points back to the four outer corners. Anything not yet
+    // digitized just resets to the new mode's default inset (via refreshCurrent).
+    if (pg.marked && pg.hasPoints())
+        pg.points = convertPoints(pg.points, pg.mode, newMode);
+    else {
+        pg.points.clear();
+        pg.marked = false;
+    }
+
+    pg.mode = newMode;
     m_lastMode = pg.mode;
-    pg.points.clear();
-    pg.marked = false;
     m_chkSplit->setEnabled(six);
     setDirty(true);
     refreshCurrent();

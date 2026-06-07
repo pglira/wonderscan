@@ -94,6 +94,22 @@ static int runModelTests()
     d2.removeAt(5); // out of range -> no-op
     WS_CHECK(d2.pageCount() == 2);
 
+    // ---- point conversion between modes (4 <-> 6) ----
+    // 4 -> 6 keeps the corners and inserts spine points at the top/bottom edge
+    // midpoints: [TL,TR,BR,BL] -> [TL, mid(TL,TR), TR, BR, mid(BR,BL), BL].
+    const QVector<QPointF> quad = {{10, 20}, {110, 22}, {108, 210}, {12, 208}};
+    const QVector<QPointF> six = convertPoints(quad, Page::Four, Page::Six);
+    WS_CHECK(six.size() == 6);
+    WS_CHECK(six[0] == quad[0] && six[2] == quad[1]);          // TL, TR
+    WS_CHECK(six[3] == quad[2] && six[5] == quad[3]);          // BR, BL
+    WS_CHECK(six[1] == QPointF(60, 21));                       // TopSpine = mid(TL,TR)
+    WS_CHECK(six[4] == QPointF(60, 209));                      // BottomSpine = mid(BR,BL)
+    // 6 -> 4 drops the spine points, keeping the four outer corners; round-trips.
+    WS_CHECK(convertPoints(six, Page::Six, Page::Four) == quad);
+    // guards: same mode, or a point count that doesn't match `from`, return input.
+    WS_CHECK(convertPoints(quad, Page::Four, Page::Four) == quad);
+    WS_CHECK(convertPoints(quad, Page::Six, Page::Four) == quad);
+
     // ---- project I/O round-trip ----
     Document src;
     src.addImages({"/img/p1.jpg", "/img/p2.jpg"}, Page::Four, false);

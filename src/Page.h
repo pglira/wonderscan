@@ -32,3 +32,13 @@ struct Page {
 
 // Default inset rectangle (12% margin) used when an image is first shown.
 QVector<QPointF> defaultInsetPoints(const QSize &imageSize, Page::Mode mode);
+
+// Convert an existing point set between modes, preserving the marked corners:
+//   Four -> Six: keep the four corners, insert spine points at the midpoints of
+//                the top and bottom edges (TopSpine = mid(TL,TR),
+//                BottomSpine = mid(BR,BL)).
+//   Six  -> Four: drop the two spine points, keep the four outer corners.
+// `pts` must hold the point count for `from`; returns `pts` unchanged if it
+// doesn't, or if `from == to`.
+QVector<QPointF> convertPoints(const QVector<QPointF> &pts,
+                               Page::Mode from, Page::Mode to);
