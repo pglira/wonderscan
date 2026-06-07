@@ -12,7 +12,22 @@
 
 namespace {
 constexpr double kHandleRadius = 7.0;
+constexpr double kActiveHandleRadius = 9.5; // selected point drawn larger
+constexpr double kActiveRingGap = 4.0;      // accent ring stand-off from the dot
 constexpr double kHitRadius = 16.0;
+
+// Map an arrow key, or its vim equivalent (h/j/k/l), to a canonical arrow key.
+// Returns 0 for any other key. Lets arrows and hjkl share the nudge logic.
+int directionKey(int key)
+{
+    switch (key) {
+    case Qt::Key_Left:  case Qt::Key_H: return Qt::Key_Left;
+    case Qt::Key_Right: case Qt::Key_L: return Qt::Key_Right;
+    case Qt::Key_Up:    case Qt::Key_K: return Qt::Key_Up;
+    case Qt::Key_Down:  case Qt::Key_J: return Qt::Key_Down;
+    default:                            return 0;
+    }
+}
 } // namespace
 
 ImageCanvas::ImageCanvas(QWidget *parent) : QWidget(parent)
@@ -151,7 +166,7 @@ void ImageCanvas::drawInsetOverlay(QPainter &p) const
         return poly;
     };
 
-    p.setPen(QPen(QColor(70, 200, 255), 1.5, Qt::DashLine)); // cyan
+    p.setPen(QPen(QColor(60, 220, 220), 1.5, Qt::DashLine)); // cyan
     p.setBrush(Qt::NoBrush);
     if (m_page->mode == Page::Four) {
         p.drawPolygon(mapPoly({0, 1, 2, 3}));
@@ -180,7 +195,7 @@ void ImageCanvas::paintEvent(QPaintEvent *)
 
     if (m_page && m_page->hasPoints()) {
         // Quad outline(s).
-        QPen quadPen(QColor(60, 200, 120), 2, Qt::DashLine);
+        QPen quadPen(QColor(220, 60, 220), 2, Qt::DashLine);
         p.setPen(quadPen);
         p.setBrush(Qt::NoBrush);
 
@@ -209,17 +224,27 @@ void ImageCanvas::paintEvent(QPaintEvent *)
         p.setFont(labelFont);
         for (int i = 0; i < m_page->points.size(); ++i) {
             const QPointF w = imageToWidget(m_page->points[i]);
+            const bool active = (i == m_activeIndex);
             const bool spine = (m_page->mode == Page::Six && (i == 1 || i == 4));
-            QColor fill = (i == m_activeIndex) ? QColor(255, 255, 255)
-                          : spine              ? QColor(255, 200, 60)
-                                               : QColor(60, 200, 120);
+            const double r = active ? kActiveHandleRadius : kHandleRadius;
+            const QColor fill = active ? QColor(255, 255, 255)
+                                : spine ? QColor(255, 200, 60)
+                                        : QColor(220, 60, 220);
+
+            // Make the selected corner unmistakable: a bright accent ring around
+            // a larger white dot, so it clearly stands out from the others.
+            if (active) {
+                p.setPen(QPen(QColor(255, 70, 70), 2.5));
+                p.setBrush(Qt::NoBrush);
+                p.drawEllipse(w, r + kActiveRingGap, r + kActiveRingGap);
+            }
+
             p.setPen(QPen(QColor(20, 20, 20), 1.5));
             p.setBrush(fill);
-            p.drawEllipse(w, kHandleRadius, kHandleRadius);
+            p.drawEllipse(w, r, r);
 
             p.setPen(QColor(20, 20, 20));
-            p.drawText(QRectF(w.x() - kHandleRadius, w.y() - kHandleRadius,
-                              2 * kHandleRadius, 2 * kHandleRadius),
+            p.drawText(QRectF(w.x() - r, w.y() - r, 2 * r, 2 * r),
                        Qt::AlignCenter, QString::number(i + 1));
         }
         p.restore();
@@ -289,20 +314,15 @@ void ImageCanvas::keyPressEvent(QKeyEvent *e)
             return;
         }
 
-        // Arrow keys nudge the selected point. Holding two at once (e.g. Up+Left)
-        // moves diagonally; Shift / Ctrl+Shift give larger steps.
+        // Arrow keys (or vim h/j/k/l) nudge the selected point. Holding two at
+        // once (e.g. Up+Left) moves diagonally; Shift / Ctrl+Shift give larger
+        // steps.
         if (m_activeIndex >= 0 && m_activeIndex < m_page->points.size()) {
-            switch (e->key()) {
-            case Qt::Key_Left:
-            case Qt::Key_Right:
-            case Qt::Key_Up:
-            case Qt::Key_Down:
-                m_heldArrows.insert(e->key());
+            if (const int dir = directionKey(e->key())) {
+                m_heldArrows.insert(dir);
                 nudgeByHeldArrows(e->modifiers());
                 e->accept();
                 return;
-            default:
-                break;
             }
         }
     }
@@ -332,18 +352,10 @@ void ImageCanvas::nudgeByHeldArrows(Qt::KeyboardModifiers mods)
 void ImageCanvas::keyReleaseEvent(QKeyEvent *e)
 {
     // Ignore the synthetic release that precedes an auto-repeat (the key is
-    // still held); only a genuine release stops tracking that arrow.
+    // still held); only a genuine release stops tracking that direction.
     if (!e->isAutoRepeat()) {
-        switch (e->key()) {
-        case Qt::Key_Left:
-        case Qt::Key_Right:
-        case Qt::Key_Up:
-        case Qt::Key_Down:
-            m_heldArrows.remove(e->key());
-            break;
-        default:
-            break;
-        }
+        if (const int dir = directionKey(e->key()))
+            m_heldArrows.remove(dir);
     }
     QWidget::keyReleaseEvent(e);
 }
