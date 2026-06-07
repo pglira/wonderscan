@@ -31,8 +31,8 @@ void ImageCanvas::setImage(const QImage &rotated, Page *page)
 {
     m_image = rotated;
     m_page = page;
-    m_activeIndex = -1;
     m_dragging = false;
+    m_activeIndex = (page && page->hasPoints()) ? 0 : -1; // auto-select corner 1
     update();
 }
 
