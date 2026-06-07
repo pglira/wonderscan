@@ -155,6 +155,7 @@ int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     QApplication::setApplicationName("wonderscan");
+    QApplication::setOrganizationName("wonderscan"); // for QSettings location
     QApplication::setApplicationDisplayName("wonderscan");
     QApplication::setDesktopFileName("wonderscan");
 

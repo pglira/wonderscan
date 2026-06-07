@@ -23,6 +23,9 @@ public:
     void setLoupeZoom(double zoom);
     double loupeZoom() const { return m_loupeZoom; }
 
+    // Arrow-key nudge distances (image px): plain / +Shift / +Ctrl+Shift.
+    void setNudgeSteps(double fine, double coarse, double large);
+
 signals:
     void pointsChanged(); // a handle was moved (page->marked is set true)
 
@@ -50,4 +53,7 @@ private:
     int m_activeIndex = -1;  // selected/highlighted point (mouse or keyboard), or -1
     bool m_dragging = false; // left button is currently dragging m_activeIndex
     double m_loupeZoom = 2.0;
+    double m_nudgeFine = 1.0;    // arrow-key step (image px)
+    double m_nudgeCoarse = 10.0; // ... with Shift
+    double m_nudgeLarge = 25.0;  // ... with Ctrl+Shift
 };

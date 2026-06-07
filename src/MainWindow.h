@@ -11,8 +11,8 @@ class PreviewPane;
 class QListWidget;
 class QAction;
 class QCheckBox;
-class QDoubleSpinBox;
 class QLabel;
+class QMenu;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -47,6 +47,7 @@ private slots:
     void onSplitToggled(bool split);
     void goPrev();
     void goNext();
+    void openSettingsDialog();
 
 private:
     void setupUi();
@@ -62,6 +63,13 @@ private:
     void rebuildFilmstrip();
     void syncControlsToCurrent();
     bool promptExportSettings();
+    bool loadProjectFile(const QString &path);
+    void loadSettings();
+    void applyEditorSettings();
+    void updateRecentMenu();
+    void addToRecent(const QString &path);
+    void removeFromRecent(const QString &path);
+    void setLastDir(const QString &dir);
     void setDirty(bool dirty);
     bool maybeSave();
     void updateTitle();
@@ -78,6 +86,13 @@ private:
     Page::Mode m_lastMode = Page::Four;
     bool m_lastSplit = false;
 
+    // Persisted preferences (QSettings)
+    QString m_lastDir;          // last folder used in open/save/export dialogs
+    int m_nudgeFine = 1;        // corner nudge steps (image px)
+    int m_nudgeCoarse = 10;
+    int m_nudgeLarge = 25;
+    double m_loupeZoom = 2.0;
+
     // Current-image working state
     QImage m_currentOriginal; // EXIF-corrected, unrotated
     QImage m_currentRotated;  // full-res rotated (canvas + loupe)
@@ -88,7 +103,7 @@ private:
     QListWidget *m_filmstrip = nullptr;
     ImageCanvas *m_canvas = nullptr;
     PreviewPane *m_preview = nullptr;
-    QDoubleSpinBox *m_loupeSpin = nullptr;
+    QMenu *m_recentMenu = nullptr;
     QLabel *m_statusLabel = nullptr;
 
     // Controls / actions

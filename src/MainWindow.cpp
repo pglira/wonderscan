@@ -27,6 +27,7 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPainter>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
@@ -40,6 +41,14 @@ namespace {
 const QStringList kImageFilters = {
     "*.jpg", "*.jpeg", "*.png", "*.tif", "*.tiff", "*.bmp", "*.webp"
 };
+
+constexpr int kMaxRecent = 8;
+const QString kRecentKey = QStringLiteral("recentProjects");
+const QString kLastDirKey = QStringLiteral("paths/lastDir");
+const QString kNudgeFineKey = QStringLiteral("nudge/fine");
+const QString kNudgeCoarseKey = QStringLiteral("nudge/coarse");
+const QString kNudgeLargeKey = QStringLiteral("nudge/large");
+const QString kLoupeKey = QStringLiteral("loupe/zoom");
 
 bool isSupportedImage(const QString &path)
 {
@@ -65,6 +74,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
     setupUi();
     setupActions();
+    loadSettings();
     setAcceptDrops(true);
     resize(1400, 900);
     updateTitle();
@@ -142,6 +152,7 @@ void MainWindow::setupActions()
     connect(actQuit, &QAction::triggered, this, &QWidget::close);
 
     fileMenu->addAction(actOpen);
+    m_recentMenu = fileMenu->addMenu(tr("Open &Recent"));
     fileMenu->addAction(actSave);
     fileMenu->addAction(actSaveAs);
     fileMenu->addSeparator();
@@ -197,6 +208,12 @@ void MainWindow::setupActions()
     editMenu->addAction(m_actPrev);
     editMenu->addAction(m_actNext);
 
+    auto *actSettings = new QAction(tr("&Settings..."), this);
+    actSettings->setShortcut(QKeySequence::Preferences);
+    connect(actSettings, &QAction::triggered, this, &MainWindow::openSettingsDialog);
+    editMenu->addSeparator();
+    editMenu->addAction(actSettings);
+
     tb->addAction(m_actRotL);
     tb->addAction(m_actRotR);
     tb->addAction(m_actRemove);
@@ -207,17 +224,6 @@ void MainWindow::setupActions()
     tb->addSeparator();
     tb->addAction(m_actPrev);
     tb->addAction(m_actNext);
-    tb->addSeparator();
-
-    tb->addWidget(new QLabel(tr(" Loupe ")));
-    m_loupeSpin = new QDoubleSpinBox(this);
-    m_loupeSpin->setRange(1.5, 12.0);
-    m_loupeSpin->setSingleStep(0.5);
-    m_loupeSpin->setValue(m_canvas->loupeZoom());
-    m_loupeSpin->setSuffix(QStringLiteral("x"));
-    connect(m_loupeSpin, &QDoubleSpinBox::valueChanged, this,
-            [this](double v) { m_canvas->setLoupeZoom(v); });
-    tb->addWidget(m_loupeSpin);
 }
 
 // ---- Importing -------------------------------------------------------------
@@ -612,16 +618,21 @@ void MainWindow::openProject()
     if (!maybeSave())
         return;
     const QString path = QFileDialog::getOpenFileName(
-        this, tr("Open Project"), QString(),
+        this, tr("Open Project"), m_lastDir,
         tr("wonderscan project (*.wsp *.json)"));
     if (path.isEmpty())
         return;
+    loadProjectFile(path);
+}
 
+bool MainWindow::loadProjectFile(const QString &path)
+{
     Project project;
     QString err;
     if (!ProjectIO::load(path, &project, &err)) {
         QMessageBox::warning(this, tr("Open failed"), err);
-        return;
+        removeFromRecent(path); // drop a stale entry if this came from the list
+        return false;
     }
 
     m_pages = project.pages;
@@ -638,6 +649,9 @@ void MainWindow::openProject()
     setDirty(false);
     selectIndex(m_pages.isEmpty() ? -1 : 0);
     updateTitle();
+    addToRecent(path);
+    setLastDir(QFileInfo(path).absolutePath());
+    return true;
 }
 
 bool MainWindow::saveProject()
@@ -656,13 +670,18 @@ bool MainWindow::saveProject()
         return false;
     }
     setDirty(false);
+    addToRecent(m_projectPath);
+    setLastDir(QFileInfo(m_projectPath).absolutePath());
     return true;
 }
 
 bool MainWindow::saveProjectAs()
 {
+    const QString suggested = m_lastDir.isEmpty()
+                                  ? QStringLiteral("project.wsp")
+                                  : QDir(m_lastDir).filePath(QStringLiteral("project.wsp"));
     QString path = QFileDialog::getSaveFileName(
-        this, tr("Save Project As"), QStringLiteral("project.wsp"),
+        this, tr("Save Project As"), suggested,
         tr("wonderscan project (*.wsp)"));
     if (path.isEmpty())
         return false;
@@ -672,6 +691,145 @@ bool MainWindow::saveProjectAs()
     m_projectPath = path;
     updateTitle();
     return saveProject();
+}
+
+// ---- Settings / recent projects --------------------------------------------
+
+// Push the current nudge/loupe preferences into the canvas.
+void MainWindow::applyEditorSettings()
+{
+    m_canvas->setNudgeSteps(m_nudgeFine, m_nudgeCoarse, m_nudgeLarge);
+    m_canvas->setLoupeZoom(m_loupeZoom);
+}
+
+void MainWindow::loadSettings()
+{
+    QSettings s;
+    m_nudgeFine = s.value(kNudgeFineKey, m_nudgeFine).toInt();
+    m_nudgeCoarse = s.value(kNudgeCoarseKey, m_nudgeCoarse).toInt();
+    m_nudgeLarge = s.value(kNudgeLargeKey, m_nudgeLarge).toInt();
+    m_loupeZoom = s.value(kLoupeKey, m_loupeZoom).toDouble();
+    m_lastDir = s.value(kLastDirKey).toString();
+
+    applyEditorSettings();
+    updateRecentMenu();
+}
+
+void MainWindow::setLastDir(const QString &dir)
+{
+    if (dir.isEmpty() || dir == m_lastDir)
+        return;
+    m_lastDir = dir;
+    QSettings().setValue(kLastDirKey, m_lastDir);
+}
+
+void MainWindow::addToRecent(const QString &path)
+{
+    const QString abs = QFileInfo(path).absoluteFilePath();
+    QSettings s;
+    QStringList recent = s.value(kRecentKey).toStringList();
+    recent.removeAll(abs);
+    recent.prepend(abs);
+    while (recent.size() > kMaxRecent)
+        recent.removeLast();
+    s.setValue(kRecentKey, recent);
+    updateRecentMenu();
+}
+
+void MainWindow::removeFromRecent(const QString &path)
+{
+    const QString abs = QFileInfo(path).absoluteFilePath();
+    QSettings s;
+    QStringList recent = s.value(kRecentKey).toStringList();
+    if (recent.removeAll(abs) > 0) {
+        s.setValue(kRecentKey, recent);
+        updateRecentMenu();
+    }
+}
+
+void MainWindow::updateRecentMenu()
+{
+    if (!m_recentMenu)
+        return;
+    m_recentMenu->clear();
+
+    const QStringList recent = QSettings().value(kRecentKey).toStringList();
+    if (recent.isEmpty()) {
+        QAction *empty = m_recentMenu->addAction(tr("(No recent projects)"));
+        empty->setEnabled(false);
+        return;
+    }
+
+    for (const QString &path : recent) {
+        const QFileInfo fi(path);
+        // Disambiguate the many identically-named "project.wsp" files by their
+        // parent folder, e.g. "Das Geburtstagspaket/project.wsp".
+        const QString parent = fi.dir().dirName();
+        const QString label =
+            parent.isEmpty() ? fi.fileName() : parent + '/' + fi.fileName();
+        QAction *a = m_recentMenu->addAction(label);
+        a->setStatusTip(path);
+        connect(a, &QAction::triggered, this, [this, path] {
+            if (maybeSave())
+                loadProjectFile(path);
+        });
+    }
+    m_recentMenu->addSeparator();
+    connect(m_recentMenu->addAction(tr("Clear List")), &QAction::triggered, this,
+            [this] {
+                QSettings().remove(kRecentKey);
+                updateRecentMenu();
+            });
+}
+
+void MainWindow::openSettingsDialog()
+{
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Settings"));
+    auto *form = new QFormLayout(&dlg);
+
+    auto makeStep = [&dlg](int value) {
+        auto *sb = new QSpinBox(&dlg);
+        sb->setRange(1, 500);
+        sb->setSuffix(tr(" px"));
+        sb->setValue(value);
+        return sb;
+    };
+    auto *fine = makeStep(m_nudgeFine);
+    auto *coarse = makeStep(m_nudgeCoarse);
+    auto *large = makeStep(m_nudgeLarge);
+    form->addRow(tr("Nudge (arrow):"), fine);
+    form->addRow(tr("Nudge (Shift):"), coarse);
+    form->addRow(tr("Nudge (Ctrl+Shift):"), large);
+
+    auto *loupe = new QDoubleSpinBox(&dlg);
+    loupe->setRange(1.5, 12.0);
+    loupe->setSingleStep(0.5);
+    loupe->setSuffix(QStringLiteral("x"));
+    loupe->setValue(m_loupeZoom);
+    form->addRow(tr("Loupe zoom:"), loupe);
+
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    form->addRow(buttons);
+
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    m_nudgeFine = fine->value();
+    m_nudgeCoarse = coarse->value();
+    m_nudgeLarge = large->value();
+    m_loupeZoom = loupe->value();
+
+    QSettings s;
+    s.setValue(kNudgeFineKey, m_nudgeFine);
+    s.setValue(kNudgeCoarseKey, m_nudgeCoarse);
+    s.setValue(kNudgeLargeKey, m_nudgeLarge);
+    s.setValue(kLoupeKey, m_loupeZoom);
+
+    applyEditorSettings();
 }
 
 // ---- Export ----------------------------------------------------------------
@@ -754,11 +912,13 @@ void MainWindow::exportPdf()
     if (!promptExportSettings())
         return;
 
-    QString defaultDir;
-    if (!m_projectPath.isEmpty())
-        defaultDir = QFileInfo(m_projectPath).absolutePath();
-    else if (!m_pages.isEmpty())
-        defaultDir = QFileInfo(m_pages.first().path).absolutePath();
+    QString defaultDir = m_lastDir;
+    if (defaultDir.isEmpty()) {
+        if (!m_projectPath.isEmpty())
+            defaultDir = QFileInfo(m_projectPath).absolutePath();
+        else if (!m_pages.isEmpty())
+            defaultDir = QFileInfo(m_pages.first().path).absolutePath();
+    }
     const QString defaultPath = QDir(defaultDir).filePath("wonderscan.pdf");
 
     const QString out = QFileDialog::getSaveFileName(
@@ -771,12 +931,14 @@ void MainWindow::exportPdf()
     const bool ok = PdfExporter::exportPdf(out, ready, m_dpi, m_jpegQuality, &err);
     QApplication::restoreOverrideCursor();
 
-    if (ok)
+    if (ok) {
+        setLastDir(QFileInfo(out).absolutePath());
         QMessageBox::information(
             this, tr("Export complete"),
             tr("Exported %1 page(s) to:\n%2").arg(ready.size()).arg(out));
-    else
+    } else {
         QMessageBox::warning(this, tr("Export failed"), err);
+    }
 }
 
 // ---- Dirty / title / status ------------------------------------------------

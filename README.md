@@ -63,14 +63,17 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
 5. Drag the **corner handles** onto the page edges, or select one by its number
    (`1`–`4`, or `1`–`6` for a spread — each handle is labelled; `Tab` /
    `Shift+Tab` step through them) and nudge it with the **arrow keys** (`Shift`
-   for a coarse 10 px step; `Esc` to deselect). The **loupe** (adjustable zoom in
-   the toolbar) helps you place them precisely.
+   and `Ctrl+Shift` give larger steps; `Esc` to deselect). The **loupe** helps
+   you place them precisely. Nudge step sizes and the loupe zoom are set in
+   **Edit → Settings** (and remembered between sessions).
 6. The **preview pane** (right) shows the rectified result live.
 7. **Remove** an unwanted image with `Delete`, the toolbar button, or
    right-click → Remove in the filmstrip (removes it from the project only —
    the file on disk is untouched).
 8. **Save Project** (`Ctrl+S`) to store your corners/rotation/mode as a `.wsp`
-   JSON file you can reopen later.
+   JSON file you can reopen later. Recently used projects are listed under
+   **File → Open Recent**, and the open/save/export dialogs reopen in the last
+   folder you used.
 9. **Export PDF** (`Ctrl+E`) — choose DPI + JPEG quality. Unmarked images are
    skipped (with a warning). Pages come out in filmstrip order.
 
@@ -86,5 +89,7 @@ QT_QPA_PLATFORM=offscreen ./build/wonderscan --selftest /tmp/out.pdf
 | Previous / next   | `p` / `n`       |
 | Select corner     | `1`–`6`         |
 | Cycle corners     | `Tab` / `Shift+Tab` |
-| Nudge corner      | Arrow keys (`Shift` = 10 px) |
+| Nudge corner      | Arrow keys (`Shift` / `Ctrl+Shift` = larger steps) |
 | Deselect corner   | `Esc`           |
+
+Nudge step sizes and loupe zoom are configurable in **Edit → Settings**.

@@ -14,8 +14,6 @@ constexpr double kHandleRadius = 7.0;
 constexpr double kHitRadius = 16.0;
 constexpr int kLoupeDiameter = 160;
 constexpr int kLoupeMargin = 12;
-constexpr double kNudgeStep = 1.0;        // image px per arrow-key press
-constexpr double kNudgeStepCoarse = 10.0; // ... with Shift held
 } // namespace
 
 ImageCanvas::ImageCanvas(QWidget *parent) : QWidget(parent)
@@ -60,6 +58,13 @@ void ImageCanvas::setLoupeZoom(double zoom)
 {
     m_loupeZoom = std::clamp(zoom, 1.5, 12.0);
     update();
+}
+
+void ImageCanvas::setNudgeSteps(double fine, double coarse, double large)
+{
+    m_nudgeFine = fine;
+    m_nudgeCoarse = coarse;
+    m_nudgeLarge = large;
 }
 
 QRectF ImageCanvas::displayRect() const
@@ -291,10 +296,13 @@ void ImageCanvas::keyPressEvent(QKeyEvent *e)
             return;
         }
 
-        // Arrow keys nudge the selected point; Shift = coarse step.
+        // Arrow keys nudge the selected point; Shift = coarse, Ctrl+Shift = large.
         if (m_activeIndex >= 0 && m_activeIndex < m_page->points.size()) {
-            const double step = (e->modifiers() & Qt::ShiftModifier) ? kNudgeStepCoarse
-                                                                     : kNudgeStep;
+            const Qt::KeyboardModifiers mods = e->modifiers();
+            const double step =
+                (mods & Qt::ShiftModifier) && (mods & Qt::ControlModifier) ? m_nudgeLarge
+                : (mods & Qt::ShiftModifier)                               ? m_nudgeCoarse
+                                                                           : m_nudgeFine;
             double dx = 0.0, dy = 0.0;
             switch (e->key()) {
             case Qt::Key_Left:  dx = -step; break;
