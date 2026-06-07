@@ -17,6 +17,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QDoubleSpinBox>
 #include <QDirIterator>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -1083,7 +1084,9 @@ bool MainWindow::saveProjectAs()
 void MainWindow::applyEditorSettings()
 {
     m_canvas->setNudgeSteps(m_prefs.nudgeFine, m_prefs.nudgeCoarse, m_prefs.nudgeLarge);
+    m_canvas->setLineWidth(m_prefs.canvasLineWidth);
     m_loupe->setZoom(m_prefs.loupeZoom);
+    m_loupe->setLineWidth(m_prefs.loupeLineWidth);
 }
 
 void MainWindow::loadSettings()
@@ -1165,6 +1168,22 @@ void MainWindow::openSettingsDialog()
     form->addRow(tr("Nudge (Shift):"), coarse);
     form->addRow(tr("Nudge (Ctrl+Shift):"), large);
 
+    // Marked-quad/spine/inset overlay line width — set separately for the canvas
+    // and the (more magnified) loupe so each can be tuned to taste.
+    auto makeWidth = [&dlg](double value) {
+        auto *sb = new QDoubleSpinBox(&dlg);
+        sb->setRange(0.5, 10.0);
+        sb->setSingleStep(0.5);
+        sb->setDecimals(1);
+        sb->setSuffix(tr(" px"));
+        sb->setValue(value);
+        return sb;
+    };
+    auto *canvasLine = makeWidth(m_prefs.canvasLineWidth);
+    auto *loupeLine = makeWidth(m_prefs.loupeLineWidth);
+    form->addRow(tr("Line width (canvas):"), canvasLine);
+    form->addRow(tr("Line width (loupe):"), loupeLine);
+
     // Loupe magnification is set by the slider on the loupe itself, not here.
 
     auto *equalWidths =
@@ -1184,6 +1203,8 @@ void MainWindow::openSettingsDialog()
     m_prefs.nudgeFine = fine->value();
     m_prefs.nudgeCoarse = coarse->value();
     m_prefs.nudgeLarge = large->value();
+    m_prefs.canvasLineWidth = canvasLine->value();
+    m_prefs.loupeLineWidth = loupeLine->value();
     m_prefs.equalPageWidths = equalWidths->isChecked();
     AppSettings::saveEditorPrefs(m_prefs);
 

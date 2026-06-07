@@ -24,6 +24,9 @@ public:
     // Arrow-key nudge distances (image px): plain / +Shift / +Ctrl+Shift.
     void setNudgeSteps(double fine, double coarse, double large);
 
+    // Pen width (px) for the marked-quad/spine/inset overlay lines.
+    void setLineWidth(double px);
+
     // Inward export offset (px): when > 0, the inset boundary that will actually
     // be exported is drawn over the marked quad. Purely a visual overlay.
     void setExportInset(int px);
@@ -73,6 +76,7 @@ private:
     int m_activeIndex = -1;  // selected/highlighted point (mouse or keyboard), or -1
     bool m_dragging = false; // left button is currently dragging m_activeIndex
     int m_exportInset = 0;   // inward export offset to visualise (px), 0 = none
+    double m_lineWidth = 2.0;    // overlay line pen width (px)
     double m_nudgeFine = 1.0;    // arrow-key step (image px)
     double m_nudgeCoarse = 10.0; // ... with Shift
     double m_nudgeLarge = 25.0;  // ... with Ctrl+Shift

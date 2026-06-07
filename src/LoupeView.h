@@ -23,6 +23,7 @@ public:
     void setPage(const Page *page);     // page whose lines to overlay (or nullptr)
     void setExportInset(int px);        // inward export offset to overlay (px)
     void setGrayscale(bool on);         // magnify the source desaturated (overlays stay coloured)
+    void setLineWidth(double px);       // pen width for the overlaid boundary lines
     void setZoom(double zoom);          // also moves the slider to match
     void stepZoom(int direction);       // nudge magnification: +1 in, -1 out (+/- keys)
     void showPoint(const QPointF &imagePoint); // centre on this image-space point
@@ -48,6 +49,7 @@ private:
     bool m_grayscale = false; // magnify the source desaturated
     const Page *m_page = nullptr; // page geometry to overlay (owned elsewhere)
     int m_inset = 0;       // export inset to overlay (px), 0 = none
+    double m_lineWidth = 1.5; // overlay line pen width (px)
     QPointF m_center;      // image-space point under the crosshair
     bool m_active = false; // a point is selected -> draw the magnified view
     double m_zoom = 2.0;

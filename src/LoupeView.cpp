@@ -124,6 +124,12 @@ void LoupeView::setExportInset(int px)
     update();
 }
 
+void LoupeView::setLineWidth(double px)
+{
+    m_lineWidth = std::max(0.5, px);
+    update();
+}
+
 void LoupeView::setZoom(double zoom)
 {
     m_zoom = std::clamp(zoom, kZoomMin, kZoomMax);
@@ -235,13 +241,13 @@ void LoupeView::drawOutline(QPainter &p, const QRectF &view, double srcD) const
     p.setBrush(Qt::NoBrush);
 
     // Marked quad(s) (dashed magenta) + spine (dashed yellow), matching the canvas.
-    p.setPen(QPen(QColor(220, 60, 220), 1.5, Qt::DashLine));
+    p.setPen(QPen(QColor(220, 60, 220), m_lineWidth, Qt::DashLine));
     if (m_page->mode == Page::Four) {
         p.drawPolygon(polyOf(m_page->points, {0, 1, 2, 3}));
     } else {
         p.drawPolygon(polyOf(m_page->points, {0, 1, 4, 5}));
         p.drawPolygon(polyOf(m_page->points, {1, 2, 3, 4}));
-        p.setPen(QPen(QColor(255, 200, 60), 1.5, Qt::DashLine));
+        p.setPen(QPen(QColor(255, 200, 60), m_lineWidth, Qt::DashLine));
         p.drawLine(map(m_page->points[1]), map(m_page->points[4]));
     }
 
@@ -250,7 +256,7 @@ void LoupeView::drawOutline(QPainter &p, const QRectF &view, double srcD) const
         const QVector<QPointF> in =
             insetPoints(m_page->points, m_page->mode, m_inset);
         if (in.size() == m_page->points.size()) {
-            p.setPen(QPen(QColor(60, 220, 220), 1.5, Qt::DashLine));
+            p.setPen(QPen(QColor(60, 220, 220), m_lineWidth, Qt::DashLine));
             if (m_page->mode == Page::Four) {
                 p.drawPolygon(polyOf(in, {0, 1, 2, 3}));
             } else {

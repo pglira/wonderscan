@@ -17,6 +17,8 @@ struct EditorPrefs {
     int nudgeLarge = 25;        // ... with Ctrl+Shift
     double loupeZoom = 2.0;     // loupe magnification
     bool equalPageWidths = true; // force equal widths for 6-point spread halves
+    double canvasLineWidth = 2.0; // marked-quad/spine/inset overlay width on the canvas (px)
+    double loupeLineWidth = 1.5;  // ... the same overlays in the magnified loupe (px)
 };
 
 namespace AppSettings {

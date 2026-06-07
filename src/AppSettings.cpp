@@ -14,6 +14,8 @@ const QString kNudgeCoarseKey = QStringLiteral("nudge/coarse");
 const QString kNudgeLargeKey = QStringLiteral("nudge/large");
 const QString kLoupeKey = QStringLiteral("loupe/zoom");
 const QString kEqualWidthsKey = QStringLiteral("render/equalPageWidths");
+const QString kCanvasLineKey = QStringLiteral("render/canvasLineWidth");
+const QString kLoupeLineKey = QStringLiteral("render/loupeLineWidth");
 
 } // namespace
 
@@ -29,6 +31,8 @@ EditorPrefs loadEditorPrefs()
     p.nudgeLarge = s.value(kNudgeLargeKey, def.nudgeLarge).toInt();
     p.loupeZoom = s.value(kLoupeKey, def.loupeZoom).toDouble();
     p.equalPageWidths = s.value(kEqualWidthsKey, def.equalPageWidths).toBool();
+    p.canvasLineWidth = s.value(kCanvasLineKey, def.canvasLineWidth).toDouble();
+    p.loupeLineWidth = s.value(kLoupeLineKey, def.loupeLineWidth).toDouble();
     return p;
 }
 
@@ -40,6 +44,8 @@ void saveEditorPrefs(const EditorPrefs &prefs)
     s.setValue(kNudgeLargeKey, prefs.nudgeLarge);
     s.setValue(kLoupeKey, prefs.loupeZoom);
     s.setValue(kEqualWidthsKey, prefs.equalPageWidths);
+    s.setValue(kCanvasLineKey, prefs.canvasLineWidth);
+    s.setValue(kLoupeLineKey, prefs.loupeLineWidth);
 }
 
 QString lastDir()
