@@ -946,6 +946,26 @@ bool MainWindow::loadProjectFile(const QString &path)
     updateTitle();
     addToRecent(path);
     setLastDir(QFileInfo(path).absolutePath());
+
+    // Projects store absolute image paths; warn if any no longer resolve (e.g.
+    // the images were moved/renamed) instead of silently showing blank pages.
+    QStringList missing;
+    for (const Page &p : m_pages)
+        if (!QFileInfo::exists(p.path))
+            missing << p.path;
+    if (!missing.isEmpty()) {
+        const QStringList shown = missing.mid(0, 10);
+        QString body = tr("%1 of %2 image(s) referenced by this project could not "
+                          "be found at their saved (absolute) paths:\n\n%3")
+                           .arg(missing.size())
+                           .arg(m_pages.size())
+                           .arg(shown.join(QStringLiteral("\n")));
+        if (missing.size() > shown.size())
+            body += tr("\n… and %1 more.").arg(missing.size() - shown.size());
+        body += tr("\n\nThose pages will appear blank. Re-add the images from "
+                   "their current location to fix them.");
+        QMessageBox::warning(this, tr("Missing images"), body);
+    }
     return true;
 }
 
