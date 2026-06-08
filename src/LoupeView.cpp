@@ -21,6 +21,17 @@ constexpr double kZoomMax = 5.0;
 constexpr int kZoomScale = 10;    // slider works in tenths of x (0.2..5.0 by 0.1)
 
 int zoomToSlider(double z) { return int(std::lround(z * kZoomScale)); }
+
+// A dashed pen with looser spacing than Qt::DashLine's tight default, so the
+// overlay reads as distinct strokes rather than a near-solid line. Flat caps
+// keep the dashes from bleeding back into the gaps. Matches the canvas.
+QPen dashedPen(const QColor &color, double width)
+{
+    QPen pen(color, width);
+    pen.setCapStyle(Qt::FlatCap);
+    pen.setDashPattern({4.0, 5.0}); // dash, gap (in pen-width units)
+    return pen;
+}
 } // namespace
 
 LoupeView::LoupeView(QWidget *parent) : QWidget(parent)
@@ -241,13 +252,13 @@ void LoupeView::drawOutline(QPainter &p, const QRectF &view, double srcD) const
     p.setBrush(Qt::NoBrush);
 
     // Marked quad(s) (dashed magenta) + spine (dashed yellow), matching the canvas.
-    p.setPen(QPen(QColor(220, 60, 220), m_lineWidth, Qt::DashLine));
+    p.setPen(dashedPen(QColor(220, 60, 220), m_lineWidth));
     if (m_page->mode == Page::Four) {
         p.drawPolygon(polyOf(m_page->points, {0, 1, 2, 3}));
     } else {
         p.drawPolygon(polyOf(m_page->points, {0, 1, 4, 5}));
         p.drawPolygon(polyOf(m_page->points, {1, 2, 3, 4}));
-        p.setPen(QPen(QColor(255, 200, 60), m_lineWidth, Qt::DashLine));
+        p.setPen(dashedPen(QColor(255, 200, 60), m_lineWidth));
         p.drawLine(map(m_page->points[1]), map(m_page->points[4]));
     }
 
@@ -256,7 +267,7 @@ void LoupeView::drawOutline(QPainter &p, const QRectF &view, double srcD) const
         const QVector<QPointF> in =
             insetPoints(m_page->points, m_page->mode, m_inset);
         if (in.size() == m_page->points.size()) {
-            p.setPen(QPen(QColor(60, 220, 220), m_lineWidth, Qt::DashLine));
+            p.setPen(dashedPen(QColor(60, 220, 220), m_lineWidth));
             if (m_page->mode == Page::Four) {
                 p.drawPolygon(polyOf(in, {0, 1, 2, 3}));
             } else {

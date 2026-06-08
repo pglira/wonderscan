@@ -16,6 +16,17 @@ constexpr double kActiveHandleRadius = 9.5; // selected point drawn larger
 constexpr double kActiveRingGap = 4.0;      // accent ring stand-off from the dot
 constexpr double kHitRadius = 16.0;
 
+// A dashed pen with looser spacing than Qt::DashLine's tight default, so the
+// overlay reads as distinct strokes rather than a near-solid line. Flat caps
+// keep the dashes from bleeding back into the gaps.
+QPen dashedPen(const QColor &color, double width)
+{
+    QPen pen(color, width);
+    pen.setCapStyle(Qt::FlatCap);
+    pen.setDashPattern({4.0, 5.0}); // dash, gap (in pen-width units)
+    return pen;
+}
+
 // Map an arrow key, or its vim equivalent (h/j/k/l), to a canonical arrow key.
 // Returns 0 for any other key. Lets arrows and hjkl share the nudge logic.
 int directionKey(int key)
@@ -197,7 +208,7 @@ void ImageCanvas::drawInsetOverlay(QPainter &p) const
         return poly;
     };
 
-    p.setPen(QPen(QColor(60, 220, 220), m_lineWidth, Qt::DashLine)); // cyan
+    p.setPen(dashedPen(QColor(60, 220, 220), m_lineWidth)); // cyan
     p.setBrush(Qt::NoBrush);
     if (m_page->mode == Page::Four) {
         p.drawPolygon(mapPoly({0, 1, 2, 3}));
@@ -226,7 +237,7 @@ void ImageCanvas::paintEvent(QPaintEvent *)
 
     if (m_page && m_page->hasPoints()) {
         // Quad outline(s).
-        QPen quadPen(QColor(220, 60, 220), m_lineWidth, Qt::DashLine);
+        QPen quadPen = dashedPen(QColor(220, 60, 220), m_lineWidth);
         p.setPen(quadPen);
         p.setBrush(Qt::NoBrush);
 
@@ -236,7 +247,7 @@ void ImageCanvas::paintEvent(QPaintEvent *)
             drawQuad(p, {0, 1, 4, 5}); // left
             drawQuad(p, {1, 2, 3, 4}); // right
             // Spine line emphasis.
-            QPen spinePen(QColor(255, 200, 60), m_lineWidth, Qt::DashLine);
+            QPen spinePen = dashedPen(QColor(255, 200, 60), m_lineWidth);
             p.setPen(spinePen);
             p.drawLine(imageToWidget(m_page->points[1]),
                        imageToWidget(m_page->points[4]));
